@@ -1,6 +1,7 @@
 use std::iter::Sum;
 
-use crate::{CoordFloat, Euclidean, Length, Line, LineString, MultiLineString};
+use crate::CoordFloat;
+use geo_traits_ext::*;
 
 /// Calculation of the length
 #[deprecated(
@@ -30,32 +31,64 @@ pub trait EuclideanLength<T, RHS = Self> {
 }
 
 #[allow(deprecated)]
-impl<T> EuclideanLength<T> for Line<T>
+impl<T, G> EuclideanLength<T> for G
 where
-    T: CoordFloat,
+    T: CoordFloat + Sum,
+    G: GeoTraitExtWithTypeTag + EuclideanLengthTrait<T, G::Tag>,
 {
     fn euclidean_length(&self) -> T {
-        Euclidean.length(self)
+        self.euclidean_length_trait()
+    }
+}
+
+trait EuclideanLengthTrait<T, GT: GeoTypeTag>
+where
+    T: CoordFloat + Sum,
+{
+    fn euclidean_length_trait(&self) -> T;
+}
+
+#[allow(deprecated)]
+impl<T, L: LineTraitExt<T = T>> EuclideanLengthTrait<T, LineTag> for L
+where
+    T: CoordFloat + Sum,
+{
+    fn euclidean_length_trait(&self) -> T {
+        let start_coord = self.start_coord();
+        let end_coord = self.end_coord();
+        let delta = start_coord - end_coord;
+        delta.x.hypot(delta.y)
     }
 }
 
 #[allow(deprecated)]
-impl<T> EuclideanLength<T> for LineString<T>
+impl<T, LS: LineStringTraitExt<T = T>> EuclideanLengthTrait<T, LineStringTag> for LS
 where
     T: CoordFloat + Sum,
 {
-    fn euclidean_length(&self) -> T {
-        Euclidean.length(self)
+    fn euclidean_length_trait(&self) -> T {
+        let mut length = T::zero();
+        for line in self.lines() {
+            let start_coord = line.start_coord();
+            let end_coord = line.end_coord();
+            let delta = start_coord - end_coord;
+            length = length + delta.x.hypot(delta.y);
+        }
+        length
     }
 }
 
 #[allow(deprecated)]
-impl<T> EuclideanLength<T> for MultiLineString<T>
+impl<T, MLS: MultiLineStringTraitExt<T = T>> EuclideanLengthTrait<T, MultiLineStringTag> for MLS
 where
     T: CoordFloat + Sum,
 {
-    fn euclidean_length(&self) -> T {
-        Euclidean.length(self)
+    fn euclidean_length_trait(&self) -> T {
+        let mut length = T::zero();
+        for line_string in self.line_strings_ext() {
+            length = length + line_string.euclidean_length_trait();
+        }
+        length
     }
 }
 
