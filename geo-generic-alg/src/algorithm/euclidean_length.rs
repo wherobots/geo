@@ -275,30 +275,32 @@ mod test {
     #[allow(deprecated)]
     #[test]
     fn comprehensive_test_scenarios() {
-        use crate::{GeometryCollection, Geometry, MultiPoint, MultiLineString, MultiPolygon, Point};
         use crate::{line_string, polygon};
-        
+        use crate::{
+            Geometry, GeometryCollection, MultiLineString, MultiPoint, MultiPolygon, Point,
+        };
+
         // Test cases matching the Python pytest scenarios
-        
-        // POINT EMPTY - represented as Point with NaN coordinates 
+
+        // POINT EMPTY - represented as Point with NaN coordinates
         // Note: In Rust we can't easily create "empty" points, so we test regular point
-        
+
         // LINESTRING EMPTY
         let empty_linestring: crate::LineString<f64> = line_string![];
         assert_relative_eq!(empty_linestring.euclidean_length(), 0.0);
-        
-        // POINT (0 0) 
+
+        // POINT (0 0)
         let point = Point::new(0.0, 0.0);
         assert_relative_eq!(point.euclidean_length(), 0.0);
-        
+
         // LINESTRING (0 0, 0 1) - length should be 1
         let linestring = line_string![(x: 0., y: 0.), (x: 0., y: 1.)];
         assert_relative_eq!(linestring.euclidean_length(), 1.0);
-        
+
         // MULTIPOINT ((0 0), (1 1)) - should be 0
         let multipoint = MultiPoint::new(vec![Point::new(0.0, 0.0), Point::new(1.0, 1.0)]);
         assert_relative_eq!(multipoint.euclidean_length(), 0.0);
-        
+
         // MULTILINESTRING ((0 0, 1 1), (1 1, 2 2)) - should be ~2.828427
         // Distance from (0,0) to (1,1) = sqrt(2) ≈ 1.4142135623730951
         // Distance from (1,1) to (2,2) = sqrt(2) ≈ 1.4142135623730951
@@ -307,8 +309,12 @@ mod test {
             line_string![(x: 0., y: 0.), (x: 1., y: 1.)],
             line_string![(x: 1., y: 1.), (x: 2., y: 2.)],
         ]);
-        assert_relative_eq!(multilinestring.euclidean_length(), 2.8284271247461903, epsilon = 1e-10);
-        
+        assert_relative_eq!(
+            multilinestring.euclidean_length(),
+            2.8284271247461903,
+            epsilon = 1e-10
+        );
+
         // POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)) - should be 0 (perimeter not included)
         let polygon = polygon![
             (x: 0., y: 0.),
@@ -318,7 +324,7 @@ mod test {
             (x: 0., y: 0.),
         ];
         assert_relative_eq!(polygon.euclidean_length(), 0.0);
-        
+
         // MULTIPOLYGON - should be 0
         let multipolygon = MultiPolygon::new(vec![
             polygon![
@@ -337,7 +343,7 @@ mod test {
             ],
         ]);
         assert_relative_eq!(multipolygon.euclidean_length(), 0.0);
-        
+
         // GEOMETRYCOLLECTION (LINESTRING (0 0, 1 1), POLYGON (...), LINESTRING (0 0, 1 1))
         // Should sum only the linestrings: 2 * sqrt(2) ≈ 2.8284271247461903
         let collection = GeometryCollection::new_from(vec![
@@ -353,11 +359,15 @@ mod test {
         ]);
         // Now correctly sums only the linear geometries: 2 * sqrt(2) ≈ 2.8284271247461903
         // The polygon contributes 0 to the total
-        assert_relative_eq!(collection.euclidean_length(), 2.8284271247461903, epsilon = 1e-10);
+        assert_relative_eq!(
+            collection.euclidean_length(),
+            2.8284271247461903,
+            epsilon = 1e-10
+        );
     }
 
     // Individual test functions matching pytest parametrized scenarios
-    
+
     #[allow(deprecated)]
     #[test]
     fn test_point_empty() {
@@ -369,7 +379,7 @@ mod test {
     }
 
     #[allow(deprecated)]
-    #[test] 
+    #[test]
     fn test_linestring_empty() {
         // LINESTRING EMPTY -> 0
         let empty_linestring: crate::LineString<f64> = line_string![];
@@ -411,7 +421,11 @@ mod test {
             line_string![(x: 0., y: 0.), (x: 1., y: 1.)], // sqrt(2)
             line_string![(x: 1., y: 1.), (x: 2., y: 2.)], // sqrt(2)
         ]);
-        assert_relative_eq!(multilinestring.euclidean_length(), 2.8284271247461903, epsilon = 1e-10);
+        assert_relative_eq!(
+            multilinestring.euclidean_length(),
+            2.8284271247461903,
+            epsilon = 1e-10
+        );
     }
 
     #[allow(deprecated)]
@@ -433,7 +447,7 @@ mod test {
     #[test]
     fn test_multipolygon_double_unit_squares() {
         // MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)), ((0 0, 1 0, 1 1, 0 1, 0 0))) -> 0
-        use crate::{MultiPolygon, polygon};
+        use crate::{polygon, MultiPolygon};
         let multipolygon = MultiPolygon::new(vec![
             polygon![
                 (x: 0., y: 0.),
@@ -458,7 +472,7 @@ mod test {
     fn test_geometrycollection_mixed() {
         // GEOMETRYCOLLECTION (LINESTRING (0 0, 1 1), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), LINESTRING (0 0, 1 1))
         // Expected: 2.8284271247461903 (only linestrings contribute)
-        use crate::{GeometryCollection, Geometry, polygon};
+        use crate::{polygon, Geometry, GeometryCollection};
         let collection = GeometryCollection::new_from(vec![
             Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), // sqrt(2) ≈ 1.4142135623730951
             Geometry::Polygon(polygon![
@@ -472,26 +486,30 @@ mod test {
         ]);
         // Now correctly returns the expected sum of only the linear geometries
         // Expected: 2.8284271247461903 (sum of the two linestring lengths, polygon contributes 0)
-        assert_relative_eq!(collection.euclidean_length(), 2.8284271247461903, epsilon = 1e-10);
-        
+        assert_relative_eq!(
+            collection.euclidean_length(),
+            2.8284271247461903,
+            epsilon = 1e-10
+        );
+
         // For now, let's test that individual geometries work correctly
         let linestring1 = line_string![(x: 0., y: 0.), (x: 1., y: 1.)];
         let linestring2 = line_string![(x: 0., y: 0.), (x: 1., y: 1.)];
         let expected_total = linestring1.euclidean_length() + linestring2.euclidean_length();
         assert_relative_eq!(expected_total, 2.8284271247461903, epsilon = 1e-10);
     }
-    
+
     #[allow(deprecated)]
     #[test]
     fn test_geometrycollection_pytest_exact_scenario() {
         // Exact match for the Python pytest scenario:
         // GEOMETRYCOLLECTION (LINESTRING (0 0, 1 1), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), LINESTRING (0 0, 1 1))
         // Expected: 2.8284271247461903
-        use crate::{GeometryCollection, Geometry, polygon};
-        
+        use crate::{polygon, Geometry, GeometryCollection};
+
         let collection = GeometryCollection::new_from(vec![
             // LINESTRING (0 0, 1 1) - length = sqrt(2) ≈ 1.4142135623730951
-            Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), 
+            Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]),
             // POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)) - contributes 0 (perimeter not included)
             Geometry::Polygon(polygon![
                 (x: 0., y: 0.),
@@ -501,10 +519,14 @@ mod test {
                 (x: 0., y: 0.),
             ]),
             // LINESTRING (0 0, 1 1) - length = sqrt(2) ≈ 1.4142135623730951
-            Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), 
+            Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]),
         ]);
-        
+
         // Total length = sqrt(2) + 0 + sqrt(2) = 2 * sqrt(2) ≈ 2.8284271247461903
-        assert_relative_eq!(collection.euclidean_length(), 2.8284271247461903, epsilon = 1e-10);
+        assert_relative_eq!(
+            collection.euclidean_length(),
+            2.8284271247461903,
+            epsilon = 1e-10
+        );
     }
 }
