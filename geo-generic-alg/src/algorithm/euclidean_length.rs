@@ -165,12 +165,23 @@ where
     T: CoordFloat + Sum,
 {
     fn euclidean_length_trait(&self) -> T {
-        // TODO: Ideally we should iterate through all internal geometries
-        // and sum the lengths of only the linear geometries (lines, linestrings, multilinestrings)
-        // while ignoring area-based geometries (points, polygons, etc.)
-        // However, this requires complex trait dispatch that's currently not working
-        // For now, return zero to maintain compilation
-        T::zero()
+        // Sum the lengths of all geometries in the collection
+        // Linear geometries (lines, linestrings) will contribute their actual length
+        // Non-linear geometries (points, polygons) will contribute zero
+        self.geometries_ext()
+            .map(|g| match g.as_type_ext() {
+                GeometryTypeExt::Point(_) => T::zero(),
+                GeometryTypeExt::Line(line) => line.euclidean_length_trait(),
+                GeometryTypeExt::LineString(ls) => ls.euclidean_length_trait(),
+                GeometryTypeExt::Polygon(_) => T::zero(),
+                GeometryTypeExt::MultiPoint(_) => T::zero(),
+                GeometryTypeExt::MultiLineString(mls) => mls.euclidean_length_trait(),
+                GeometryTypeExt::MultiPolygon(_) => T::zero(),
+                GeometryTypeExt::GeometryCollection(gc) => gc.euclidean_length_trait(),
+                GeometryTypeExt::Rect(_) => T::zero(),
+                GeometryTypeExt::Triangle(_) => T::zero(),
+            })
+            .fold(T::zero(), |acc, next| acc + next)
     }
 }
 
@@ -340,9 +351,9 @@ mod test {
             ]), // contributes 0
             Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), // sqrt(2)
         ]);
-        // TODO: Currently returns 0.0 due to trait dispatch limitations
-        // Should return 2.8284271247461903 (2 * sqrt(2))
-        assert_relative_eq!(collection.euclidean_length(), 0.0);
+        // Now correctly sums only the linear geometries: 2 * sqrt(2) ≈ 2.8284271247461903
+        // The polygon contributes 0 to the total
+        assert_relative_eq!(collection.euclidean_length(), 2.8284271247461903, epsilon = 1e-10);
     }
 
     // Individual test functions matching pytest parametrized scenarios
@@ -459,14 +470,41 @@ mod test {
             ]), // contributes 0
             Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), // sqrt(2) ≈ 1.4142135623730951
         ]);
-        // TODO: Currently returns 0.0 due to trait dispatch limitations in GeometryCollection
-        // Expected: 2.8284271247461903 (sum of the two linestring lengths)
-        assert_relative_eq!(collection.euclidean_length(), 0.0);
+        // Now correctly returns the expected sum of only the linear geometries
+        // Expected: 2.8284271247461903 (sum of the two linestring lengths, polygon contributes 0)
+        assert_relative_eq!(collection.euclidean_length(), 2.8284271247461903, epsilon = 1e-10);
         
         // For now, let's test that individual geometries work correctly
         let linestring1 = line_string![(x: 0., y: 0.), (x: 1., y: 1.)];
         let linestring2 = line_string![(x: 0., y: 0.), (x: 1., y: 1.)];
         let expected_total = linestring1.euclidean_length() + linestring2.euclidean_length();
         assert_relative_eq!(expected_total, 2.8284271247461903, epsilon = 1e-10);
+    }
+    
+    #[allow(deprecated)]
+    #[test]
+    fn test_geometrycollection_pytest_exact_scenario() {
+        // Exact match for the Python pytest scenario:
+        // GEOMETRYCOLLECTION (LINESTRING (0 0, 1 1), POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)), LINESTRING (0 0, 1 1))
+        // Expected: 2.8284271247461903
+        use crate::{GeometryCollection, Geometry, polygon};
+        
+        let collection = GeometryCollection::new_from(vec![
+            // LINESTRING (0 0, 1 1) - length = sqrt(2) ≈ 1.4142135623730951
+            Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), 
+            // POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)) - contributes 0 (perimeter not included)
+            Geometry::Polygon(polygon![
+                (x: 0., y: 0.),
+                (x: 1., y: 0.),
+                (x: 1., y: 1.),
+                (x: 0., y: 1.),
+                (x: 0., y: 0.),
+            ]),
+            // LINESTRING (0 0, 1 1) - length = sqrt(2) ≈ 1.4142135623730951
+            Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), 
+        ]);
+        
+        // Total length = sqrt(2) + 0 + sqrt(2) = 2 * sqrt(2) ≈ 2.8284271247461903
+        assert_relative_eq!(collection.euclidean_length(), 2.8284271247461903, epsilon = 1e-10);
     }
 }
