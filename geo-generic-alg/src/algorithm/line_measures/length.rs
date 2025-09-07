@@ -331,7 +331,10 @@ mod tests {
     // Tests for LengthMeasurableExt - adapted from euclidean_length.rs
     mod length_measurable_ext_tests {
         use super::*;
-        use crate::{line_string, polygon, coord, Line, MultiLineString, Point, Polygon, MultiPoint, MultiPolygon, Geometry, GeometryCollection};
+        use crate::{
+            coord, line_string, polygon, Geometry, GeometryCollection, Line, MultiLineString,
+            MultiPoint, MultiPolygon, Point, Polygon,
+        };
 
         #[test]
         fn empty_linestring_test() {
@@ -489,21 +492,21 @@ mod tests {
         fn test_different_metric_spaces() {
             // Test that different metric spaces work with LengthMeasurableExt
             let linestring = line_string![(x: 0., y: 0.), (x: 3., y: 4.)];
-            
+
             // Euclidean should give us 5.0
             assert_relative_eq!(linestring.length_ext(&Euclidean), 5.0);
-            
+
             // Test with geographic coordinates (lon/lat) - these will give nonsense results
             // but should demonstrate the API works with different metric spaces
             let lon_lat_line = line_string![
                 (x: -0.1278f64, y: 51.5074), // London
                 (x: 2.3522, y: 48.8566)      // Paris
             ];
-            
+
             // These should all work without errors (values are from the existing tests)
             assert_eq!(Haversine.length(&lon_lat_line).round(), 343_557.);
             assert_eq!(lon_lat_line.length_ext(&Haversine).round(), 343_557.);
-            
+
             // Verify both APIs give the same result
             assert_relative_eq!(
                 Haversine.length(&lon_lat_line),
