@@ -93,10 +93,21 @@ impl<F: CoordFloat> LengthMeasurable<F> for MultiLineString<F> {
 /// # Examples
 /// ```
 /// use geo_generic_alg::algorithm::line_measures::{LengthMeasurableExt, Euclidean};
-///
-/// // Works with WKB geometries
-/// let wkb_geom = geo_generic_tests::wkb::reader::read_wkb(&wkb_bytes).unwrap();
+/// // Example WKB bytes for LINESTRING(0 0, 3 4, 3 5) in little-endian
+/// let wkb_bytes: &[u8] = &[
+///     1, // little endian
+///     2, 0, 0, 0, // geometry type: LineString (2)
+///     3, 0, 0, 0, // num points: 3
+///     0, 0, 0, 0, 0, 0, 0, 0, // x0 = 0.0
+///     0, 0, 0, 0, 0, 0, 0, 0, // y0 = 0.0
+///     0, 0, 0, 0, 0, 0, 8, 64, // x1 = 3.0
+///     0, 0, 0, 0, 0, 0, 16, 64, // y1 = 4.0
+///     0, 0, 0, 0, 0, 0, 8, 64, // x2 = 3.0
+///     0, 0, 0, 0, 0, 0, 20, 64, // y2 = 5.0
+/// ];
+/// let wkb_geom = geo_generic_tests::wkb::reader::read_wkb(wkb_bytes).unwrap();
 /// let length = wkb_geom.length_ext(&Euclidean);
+/// assert_eq!(length, 6.0);
 /// ```
 pub trait LengthMeasurableExt<F: CoordFloat> {
     /// Calculate the length using the given metric space.
