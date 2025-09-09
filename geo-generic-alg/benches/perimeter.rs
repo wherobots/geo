@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use geo_generic_alg::Perimeter;
+use geo_generic_alg::algorithm::line_measures::{Euclidean, LengthMeasurableExt};
 use geo_generic_alg::Polygon;
 use geo_traits::to_geo::ToGeoGeometry;
 
@@ -12,7 +12,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let polygon = Polygon::new(norway, vec![]);
 
         bencher.iter(|| {
-            criterion::black_box(criterion::black_box(&polygon).perimeter());
+            criterion::black_box(criterion::black_box(&polygon).perimeter_ext(&Euclidean));
         });
     });
 
@@ -21,7 +21,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let polygon = Polygon::new(norway, vec![]);
 
         bencher.iter(|| {
-            criterion::black_box(criterion::black_box(&polygon).perimeter());
+            criterion::black_box(criterion::black_box(&polygon).perimeter_ext(&Euclidean));
         });
     });
 
@@ -32,7 +32,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         bencher.iter(|| {
             let wkb_geom = geo_generic_tests::wkb::reader::read_wkb(&wkb_bytes).unwrap();
-            criterion::black_box(wkb_geom.perimeter());
+            criterion::black_box(wkb_geom.perimeter_ext(&Euclidean));
         });
     });
 
@@ -44,7 +44,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         bencher.iter(|| {
             let wkb_geom = geo_generic_tests::wkb::reader::read_wkb(&wkb_bytes).unwrap();
             let geom = wkb_geom.to_geometry();
-            criterion::black_box(geom.perimeter());
+            criterion::black_box(geom.perimeter_ext(&Euclidean));
         });
     });
 }

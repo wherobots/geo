@@ -91,14 +91,10 @@ impl<F: CoordFloat> LengthMeasurable<F> for MultiLineString<F> {
     }
 }
 
-/// Extension trait that enables the modern Length API for WKB and other generic geometry types.
+/// Extension trait that enables the modern Length and Perimeter API for WKB and other generic geometry types.
 ///
 /// This provides the same API as the concrete `LengthMeasurable` implementations but works with
 /// any geometry type that implements the geo-traits-ext pattern.
-///
-/// For 1D geometries (Line, LineString, MultiLineString), returns the length.
-/// For 2D geometries (Polygon, MultiPolygon, Rect, Triangle), returns the perimeter.
-/// For 0D geometries (Point, MultiPoint), returns zero.
 ///
 /// # Examples
 /// ```
@@ -121,7 +117,17 @@ impl<F: CoordFloat> LengthMeasurable<F> for MultiLineString<F> {
 /// ```
 pub trait LengthMeasurableExt<F: CoordFloat> {
     /// Calculate the length using the given metric space.
+    ///
+    /// For 1D geometries (Line, LineString, MultiLineString), returns the actual length.
+    /// For 0D and 2D geometries, returns zero.
     fn length_ext(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F;
+
+    /// Calculate the perimeter using the given metric space.
+    ///
+    /// For 2D geometries (Polygon, MultiPolygon, Rect, Triangle), returns the perimeter.
+    /// For 1D geometries (Line, LineString, MultiLineString), returns the length.
+    /// For 0D geometries (Point, MultiPoint), returns zero.
+    fn perimeter_ext(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F;
 }
 
 // Implementation for WKB and other generic geometries using the type-tag pattern
@@ -133,14 +139,19 @@ where
     fn length_ext(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         self.length_trait(metric_space)
     }
+
+    fn perimeter_ext(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        self.perimeter_trait(metric_space)
+    }
 }
 
-// Internal trait that handles the actual length computation for different geometry types
+// Internal trait that handles the actual length and perimeter computation for different geometry types
 trait LengthMeasurableTrait<F, GT: GeoTypeTag>
 where
     F: CoordFloat,
 {
     fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F;
+    fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F;
 }
 
 // Implementation for Line geometries
@@ -152,6 +163,11 @@ where
         let start = Point::new(self.start_coord().x, self.start_coord().y);
         let end = Point::new(self.end_coord().x, self.end_coord().y);
         metric_space.distance(start, end)
+    }
+
+    fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        // For lines, perimeter equals length
+        self.length_trait(metric_space)
     }
 }
 
@@ -169,6 +185,11 @@ where
         }
         length
     }
+
+    fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        // For linestrings, perimeter equals length
+        self.length_trait(metric_space)
+    }
 }
 
 // Implementation for MultiLineString geometries
@@ -183,6 +204,11 @@ where
         }
         length
     }
+
+    fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        // For multilinestrings, perimeter equals total length
+        self.length_trait(metric_space)
+    }
 }
 
 // For geometry types that don't have a meaningful length (return zero)
@@ -193,6 +219,10 @@ where
     fn length_trait(&self, _metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         F::zero()
     }
+
+    fn perimeter_trait(&self, _metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        F::zero()
+    }
 }
 
 impl<F, MP: MultiPointTraitExt<T = F>> LengthMeasurableTrait<F, MultiPointTag> for MP
@@ -200,6 +230,10 @@ where
     F: CoordFloat,
 {
     fn length_trait(&self, _metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        F::zero()
+    }
+
+    fn perimeter_trait(&self, _metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         F::zero()
     }
 }
@@ -250,7 +284,12 @@ impl<F, P: PolygonTraitExt<T = F>> LengthMeasurableTrait<F, PolygonTag> for P
 where
     F: CoordFloat,
 {
-    fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+    fn length_trait(&self, _metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        // Length is a 1D concept, doesn't apply to 2D polygons
+        F::zero()
+    }
+
+    fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         // For polygons, return the perimeter (length of the boundary)
         let mut total_perimeter = match self.exterior_ext() {
             Some(exterior) => linestring_perimeter_with_metric(&exterior, metric_space),
@@ -271,7 +310,12 @@ impl<F, MP: MultiPolygonTraitExt<T = F>> LengthMeasurableTrait<F, MultiPolygonTa
 where
     F: CoordFloat,
 {
-    fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+    fn length_trait(&self, _metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        // Length is a 1D concept, doesn't apply to 2D multipolygons
+        F::zero()
+    }
+
+    fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         // For multipolygons, return the sum of all polygon perimeters
         let mut total_perimeter = F::zero();
         for polygon in self.polygons() {
@@ -298,7 +342,12 @@ where
     F: CoordFloat,
 {
     fn length_trait(&self, _metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
-        // For rectangles, return the perimeter (use width/height methods if available)
+        // Length is a 1D concept, doesn't apply to 2D rectangles
+        F::zero()
+    }
+
+    fn perimeter_trait(&self, _metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        // For rectangles, return the perimeter
         let width = self.width();
         let height = self.height();
         let two = F::one() + F::one();
@@ -310,15 +359,20 @@ impl<F, T: TriangleTraitExt<T = F>> LengthMeasurableTrait<F, TriangleTag> for T
 where
     F: CoordFloat,
 {
-    fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+    fn length_trait(&self, _metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        // Length is a 1D concept, doesn't apply to 2D triangles
+        F::zero()
+    }
+
+    fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         // For triangles, return the perimeter (sum of all three sides)
         let coord0 = self.first_coord();
         let coord1 = self.second_coord();
         let coord2 = self.third_coord();
 
-        let p0 = Point::new(coord0.x(), coord0.y());
-        let p1 = Point::new(coord1.x(), coord1.y());
-        let p2 = Point::new(coord2.x(), coord2.y());
+        let p0 = Point::new(coord0.x, coord0.y);
+        let p1 = Point::new(coord1.x, coord1.y);
+        let p2 = Point::new(coord2.x, coord2.y);
 
         let side1 = metric_space.distance(p0, p1);
         let side2 = metric_space.distance(p1, p2);
@@ -340,19 +394,35 @@ where
                 GeometryTypeExt::Point(_) => F::zero(),
                 GeometryTypeExt::Line(line) => line.length_trait(metric_space),
                 GeometryTypeExt::LineString(ls) => ls.length_trait(metric_space),
-                GeometryTypeExt::Polygon(polygon) => polygon.length_trait(metric_space),
+                GeometryTypeExt::Polygon(_) => F::zero(),
                 GeometryTypeExt::MultiPoint(_) => F::zero(),
                 GeometryTypeExt::MultiLineString(mls) => mls.length_trait(metric_space),
-                GeometryTypeExt::MultiPolygon(mp) => mp.length_trait(metric_space),
+                GeometryTypeExt::MultiPolygon(_) => F::zero(),
                 GeometryTypeExt::GeometryCollection(gc) => gc.length_trait(metric_space),
-                GeometryTypeExt::Rect(rect) => rect.length_trait(metric_space),
-                GeometryTypeExt::Triangle(triangle) => triangle.length_trait(metric_space),
+                GeometryTypeExt::Rect(_) => F::zero(),
+                GeometryTypeExt::Triangle(_) => F::zero(),
+            })
+            .fold(F::zero(), |acc, next| acc + next)
+    }
+
+    fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        self.geometries_ext()
+            .map(|g| match g.as_type_ext() {
+                GeometryTypeExt::Point(_) => F::zero(),
+                GeometryTypeExt::Line(line) => line.perimeter_trait(metric_space),
+                GeometryTypeExt::LineString(ls) => ls.perimeter_trait(metric_space),
+                GeometryTypeExt::Polygon(polygon) => polygon.perimeter_trait(metric_space),
+                GeometryTypeExt::MultiPoint(_) => F::zero(),
+                GeometryTypeExt::MultiLineString(mls) => mls.perimeter_trait(metric_space),
+                GeometryTypeExt::MultiPolygon(mp) => mp.perimeter_trait(metric_space),
+                GeometryTypeExt::GeometryCollection(gc) => gc.perimeter_trait(metric_space),
+                GeometryTypeExt::Rect(rect) => rect.perimeter_trait(metric_space),
+                GeometryTypeExt::Triangle(triangle) => triangle.perimeter_trait(metric_space),
             })
             .fold(F::zero(), |acc, next| acc + next)
     }
 }
 
-// Critical: GeometryTag implementation for WKB compatibility
 impl<F, G: GeometryTraitExt<T = F>> LengthMeasurableTrait<F, GeometryTag> for G
 where
     F: CoordFloat,
@@ -362,6 +432,13 @@ where
     // are correctly dispatched for all geometry types when deserializing from WKB.
     crate::geometry_trait_ext_delegate_impl! {
         fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F;
+    }
+
+    // This macro delegates the `perimeter_trait` method to the appropriate geometry variant.
+    // It is critical for WKB (Well-Known Binary) compatibility, ensuring that trait methods
+    // are correctly dispatched for all geometry types when deserializing from WKB.
+    crate::geometry_trait_ext_delegate_impl! {
+        fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F;
     }
 }
 
@@ -500,7 +577,7 @@ mod tests {
         }
 
         #[test]
-        fn polygon_perimeter_test() {
+        fn polygon_length_and_perimeter_test() {
             let polygon: Polygon<f64> = polygon![
                 (x: 0., y: 0.),
                 (x: 4., y: 0.),
@@ -508,8 +585,10 @@ mod tests {
                 (x: 0., y: 4.),
                 (x: 0., y: 0.),
             ];
-            // For polygons, length_ext returns the perimeter: 4 + 4 + 4 + 4 = 16
-            assert_relative_eq!(polygon.length_ext(&Euclidean), 16.0);
+            // For polygons, length_ext returns zero (length is a 1D concept)
+            assert_relative_eq!(polygon.length_ext(&Euclidean), 0.0);
+            // For polygons, perimeter_ext returns the perimeter: 4 + 4 + 4 + 4 = 16
+            assert_relative_eq!(polygon.perimeter_ext(&Euclidean), 16.0);
         }
 
         #[test]
@@ -520,26 +599,26 @@ mod tests {
         }
 
         #[test]
-        fn comprehensive_test_scenarios() {
-            // Test cases matching the Python pytest scenarios
+        fn comprehensive_length_test_scenarios() {
+            // Test cases for length calculations - should return actual length only for 1D geometries
 
             // LINESTRING EMPTY
             let empty_linestring: crate::LineString<f64> = line_string![];
             assert_relative_eq!(empty_linestring.length_ext(&Euclidean), 0.0);
 
-            // POINT (0 0)
+            // POINT (0 0) - 0D geometry
             let point = Point::new(0.0, 0.0);
             assert_relative_eq!(point.length_ext(&Euclidean), 0.0);
 
-            // LINESTRING (0 0, 0 1) - length should be 1
+            // LINESTRING (0 0, 0 1) - 1D geometry, length should be 1
             let linestring = line_string![(x: 0., y: 0.), (x: 0., y: 1.)];
             assert_relative_eq!(linestring.length_ext(&Euclidean), 1.0);
 
-            // MULTIPOINT ((0 0), (1 1)) - should be 0
+            // MULTIPOINT ((0 0), (1 1)) - 0D geometry, should be 0
             let multipoint = MultiPoint::new(vec![Point::new(0.0, 0.0), Point::new(1.0, 1.0)]);
             assert_relative_eq!(multipoint.length_ext(&Euclidean), 0.0);
 
-            // MULTILINESTRING ((0 0, 1 1), (1 1, 2 2)) - should be ~2.828427
+            // MULTILINESTRING ((0 0, 1 1), (1 1, 2 2)) - 1D geometry, should be ~2.828427
             let multilinestring = MultiLineString::new(vec![
                 line_string![(x: 0., y: 0.), (x: 1., y: 1.)],
                 line_string![(x: 1., y: 1.), (x: 2., y: 2.)],
@@ -550,7 +629,7 @@ mod tests {
                 epsilon = 1e-10
             );
 
-            // POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)) - should be 4.0 (perimeter: 1+1+1+1)
+            // POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)) - 2D geometry, length should be 0
             let polygon = polygon![
                 (x: 0., y: 0.),
                 (x: 1., y: 0.),
@@ -558,9 +637,9 @@ mod tests {
                 (x: 0., y: 1.),
                 (x: 0., y: 0.),
             ];
-            assert_relative_eq!(polygon.length_ext(&Euclidean), 4.0);
+            assert_relative_eq!(polygon.length_ext(&Euclidean), 0.0);
 
-            // MULTIPOLYGON - should be 8.0 (two polygons with perimeter 4.0 each)
+            // MULTIPOLYGON - 2D geometry, length should be 0
             let multipolygon = MultiPolygon::new(vec![
                 polygon![
                     (x: 0., y: 0.),
@@ -577,11 +656,115 @@ mod tests {
                     (x: 2., y: 2.),
                 ],
             ]);
-            assert_relative_eq!(multipolygon.length_ext(&Euclidean), 8.0);
+            assert_relative_eq!(multipolygon.length_ext(&Euclidean), 0.0);
 
-            // GEOMETRYCOLLECTION (LINESTRING (0 0, 1 1), POLYGON (...), LINESTRING (0 0, 1 1))
-            // Should sum linestrings + polygon perimeter: 2 * sqrt(2) + 4 ≈ 6.8284271247461903
+            // RECT - 2D geometry, length should be 0
+            let rect = crate::Rect::new(coord! { x: 0., y: 0. }, coord! { x: 3., y: 4. });
+            assert_relative_eq!(rect.length_ext(&Euclidean), 0.0);
+
+            // TRIANGLE - 2D geometry, length should be 0
+            let triangle = crate::Triangle::new(
+                coord! { x: 0., y: 0. },
+                coord! { x: 3., y: 0. },
+                coord! { x: 0., y: 4. },
+            );
+            assert_relative_eq!(triangle.length_ext(&Euclidean), 0.0);
+
+            // GEOMETRYCOLLECTION - should sum only the 1D geometries (linestrings)
             let collection = GeometryCollection::new_from(vec![
+                Geometry::Point(Point::new(0.0, 0.0)), // contributes 0
+                Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), // sqrt(2) ≈ 1.414
+                Geometry::Polygon(polygon![
+                    (x: 0., y: 0.),
+                    (x: 1., y: 0.),
+                    (x: 1., y: 1.),
+                    (x: 0., y: 1.),
+                    (x: 0., y: 0.),
+                ]), // contributes 0 to length
+                Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), // sqrt(2) ≈ 1.414
+            ]);
+            assert_relative_eq!(
+                collection.length_ext(&Euclidean),
+                2.8284271247461903, // 2*sqrt(2) only from linestrings
+                epsilon = 1e-10
+            );
+        }
+
+        #[test]
+        fn comprehensive_perimeter_test_scenarios() {
+            // Test cases for perimeter calculations
+
+            // LINESTRING EMPTY - no perimeter
+            let empty_linestring: crate::LineString<f64> = line_string![];
+            assert_relative_eq!(empty_linestring.perimeter_ext(&Euclidean), 0.0);
+
+            // POINT (0 0) - 0D geometry, no perimeter
+            let point = Point::new(0.0, 0.0);
+            assert_relative_eq!(point.perimeter_ext(&Euclidean), 0.0);
+
+            // LINESTRING (0 0, 0 1) - 1D geometry, perimeter equals length
+            let linestring = line_string![(x: 0., y: 0.), (x: 0., y: 1.)];
+            assert_relative_eq!(linestring.perimeter_ext(&Euclidean), 1.0);
+
+            // MULTIPOINT ((0 0), (1 1)) - 0D geometry, no perimeter
+            let multipoint = MultiPoint::new(vec![Point::new(0.0, 0.0), Point::new(1.0, 1.0)]);
+            assert_relative_eq!(multipoint.perimeter_ext(&Euclidean), 0.0);
+
+            // MULTILINESTRING ((0 0, 1 1), (1 1, 2 2)) - 1D geometry, perimeter equals total length
+            let multilinestring = MultiLineString::new(vec![
+                line_string![(x: 0., y: 0.), (x: 1., y: 1.)],
+                line_string![(x: 1., y: 1.), (x: 2., y: 2.)],
+            ]);
+            assert_relative_eq!(
+                multilinestring.perimeter_ext(&Euclidean),
+                2.8284271247461903,
+                epsilon = 1e-10
+            );
+
+            // POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)) - 2D geometry, actual perimeter
+            let polygon = polygon![
+                (x: 0., y: 0.),
+                (x: 1., y: 0.),
+                (x: 1., y: 1.),
+                (x: 0., y: 1.),
+                (x: 0., y: 0.),
+            ];
+            assert_relative_eq!(polygon.perimeter_ext(&Euclidean), 4.0);
+
+            // MULTIPOLYGON - 2D geometry, sum of all polygon perimeters
+            let multipolygon = MultiPolygon::new(vec![
+                polygon![
+                    (x: 0., y: 0.),
+                    (x: 1., y: 0.),
+                    (x: 1., y: 1.),
+                    (x: 0., y: 1.),
+                    (x: 0., y: 0.),
+                ],
+                polygon![
+                    (x: 2., y: 2.),
+                    (x: 3., y: 2.),
+                    (x: 3., y: 3.),
+                    (x: 2., y: 3.),
+                    (x: 2., y: 2.),
+                ],
+            ]);
+            assert_relative_eq!(multipolygon.perimeter_ext(&Euclidean), 8.0);
+
+            // RECT - 2D geometry, perimeter = 2*(width + height)
+            let rect = crate::Rect::new(coord! { x: 0., y: 0. }, coord! { x: 3., y: 4. });
+            assert_relative_eq!(rect.perimeter_ext(&Euclidean), 14.0); // 2*(3+4) = 14
+
+            // TRIANGLE - 2D geometry, sum of all three sides
+            let triangle = crate::Triangle::new(
+                coord! { x: 0., y: 0. },
+                coord! { x: 3., y: 0. },
+                coord! { x: 0., y: 4. },
+            );
+            assert_relative_eq!(triangle.perimeter_ext(&Euclidean), 12.0); // 3 + 4 + 5 = 12
+
+            // GEOMETRYCOLLECTION - should sum perimeters from all geometries
+            let collection = GeometryCollection::new_from(vec![
+                Geometry::Point(Point::new(0.0, 0.0)), // contributes 0
                 Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), // sqrt(2) ≈ 1.414
                 Geometry::Polygon(polygon![
                     (x: 0., y: 0.),
@@ -593,8 +776,8 @@ mod tests {
                 Geometry::LineString(line_string![(x: 0., y: 0.), (x: 1., y: 1.)]), // sqrt(2) ≈ 1.414
             ]);
             assert_relative_eq!(
-                collection.length_ext(&Euclidean),
-                2.8284271247461903 + 4.0, // 2*sqrt(2) + 4
+                collection.perimeter_ext(&Euclidean),
+                2.8284271247461903 + 4.0, // 2*sqrt(2) + 4 (linestrings + polygon perimeter)
                 epsilon = 1e-10
             );
         }
@@ -645,8 +828,10 @@ mod tests {
                     coord! { x: 2., y: 2. },
                 ])],
             );
+            // Length should be 0 (2D geometry)
+            assert_relative_eq!(polygon.length_ext(&Euclidean), 0.0);
             // Exterior perimeter: 40 (10+10+10+10), Interior perimeter: 24 (6+6+6+6)
-            assert_relative_eq!(polygon.length_ext(&Euclidean), 64.0);
+            assert_relative_eq!(polygon.perimeter_ext(&Euclidean), 64.0);
         }
 
         #[test]
@@ -658,8 +843,10 @@ mod tests {
                 coord! { x: 3., y: 0. },
                 coord! { x: 0., y: 4. },
             );
+            // Length should be 0 (2D geometry)
+            assert_relative_eq!(triangle.length_ext(&Euclidean), 0.0);
             // Perimeter should be 3 + 4 + 5 = 12
-            assert_relative_eq!(triangle.length_ext(&Euclidean), 12.0);
+            assert_relative_eq!(triangle.perimeter_ext(&Euclidean), 12.0);
         }
 
         #[test]
@@ -667,8 +854,10 @@ mod tests {
             use crate::Rect;
             // Rectangle 3x4
             let rect = Rect::new(coord! { x: 0., y: 0. }, coord! { x: 3., y: 4. });
+            // Length should be 0 (2D geometry)
+            assert_relative_eq!(rect.length_ext(&Euclidean), 0.0);
             // Perimeter should be 2*(3+4) = 14
-            assert_relative_eq!(rect.length_ext(&Euclidean), 14.0);
+            assert_relative_eq!(rect.perimeter_ext(&Euclidean), 14.0);
         }
     }
 }
