@@ -64,8 +64,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("distance_wkb_point_to_point", |bencher| {
         let p1 = Point::new(0.0, 0.0);
         let p2 = Point::new(100.0, 100.0);
-        let wkb_bytes1 = wkb::geo_to_wkb(&p1);
-        let wkb_bytes2 = wkb::geo_to_wkb(&p2);
+        let wkb_bytes1 = wkb::geo_to_wkb(p1);
+        let wkb_bytes2 = wkb::geo_to_wkb(p2);
 
         bencher.iter(|| {
             let wkb_geom1 = geo_generic_tests::wkb::reader::read_wkb(&wkb_bytes1).unwrap();
