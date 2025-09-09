@@ -546,9 +546,8 @@ where
 mod tests {
     use super::*;
     use crate::{
-        coord, Euclidean, Geodesic, Geometry, GeometryCollection,
-        Haversine, Line, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon,
-        Rect, Rhumb, Triangle,
+        coord, Euclidean, Geodesic, Geometry, GeometryCollection, Haversine, Line, LineString,
+        MultiLineString, MultiPoint, MultiPolygon, Point, Polygon, Rect, Rhumb, Triangle,
     };
     use approx::assert_relative_eq;
 
@@ -625,14 +624,8 @@ mod tests {
 
     #[test]
     fn linestring_to_linestring_intersecting() {
-        let ls1 = LineString::from(vec![
-            coord!(x: 0.0, y: 0.0),
-            coord!(x: 2.0, y: 2.0),
-        ]);
-        let ls2 = LineString::from(vec![
-            coord!(x: 0.0, y: 2.0),
-            coord!(x: 2.0, y: 0.0),
-        ]);
+        let ls1 = LineString::from(vec![coord!(x: 0.0, y: 0.0), coord!(x: 2.0, y: 2.0)]);
+        let ls2 = LineString::from(vec![coord!(x: 0.0, y: 2.0), coord!(x: 2.0, y: 0.0)]);
 
         // Our implementation finds distance between vertices and segments
         // The segments cross but we check point-to-segment distances
@@ -720,14 +713,8 @@ mod tests {
 
     #[test]
     fn multipoint_distance() {
-        let mp1 = MultiPoint::new(vec![
-            Point::new(0.0, 0.0),
-            Point::new(1.0, 1.0),
-        ]);
-        let mp2 = MultiPoint::new(vec![
-            Point::new(2.0, 2.0),
-            Point::new(3.0, 3.0),
-        ]);
+        let mp1 = MultiPoint::new(vec![Point::new(0.0, 0.0), Point::new(1.0, 1.0)]);
+        let mp2 = MultiPoint::new(vec![Point::new(2.0, 2.0), Point::new(3.0, 3.0)]);
 
         // Closest points: (1.0, 1.0) to (2.0, 2.0) = sqrt(2)
         assert_relative_eq!(mp1.distance_ext(&Euclidean, &mp2), (2.0_f64).sqrt());
@@ -770,7 +757,7 @@ mod tests {
             ]),
             vec![],
         );
-        
+
         let mp1 = MultiPolygon::new(vec![poly1]);
         let mp2 = MultiPolygon::new(vec![poly2]);
 
@@ -877,11 +864,11 @@ mod tests {
         // Test that cross-type combinations return infinity (unsupported)
         let point = Point::new(0.0, 0.0);
         let line = Line::new(coord!(x: 1.0, y: 1.0), coord!(x: 2.0, y: 2.0));
-        
+
         // Create geometry wrappers for cross-type testing
         let geom1 = Geometry::Point(point);
         let geom2 = Geometry::Line(line);
-        
+
         // Cross-type distance should return infinity (unsupported)
         assert_eq!(geom1.distance_ext(&Euclidean, &geom2), f64::INFINITY);
     }
@@ -893,19 +880,31 @@ mod tests {
         let point = Point::new(1.0, 0.0);
         let seg_start = Point::new(0.0, 0.0);
         let seg_end = Point::new(2.0, 0.0);
-        assert_eq!(point_to_segment_distance(point, seg_start, seg_end, &Euclidean), 0.0);
+        assert_eq!(
+            point_to_segment_distance(point, seg_start, seg_end, &Euclidean),
+            0.0
+        );
 
         // Point perpendicular to segment
         let point = Point::new(1.0, 1.0);
-        assert_eq!(point_to_segment_distance(point, seg_start, seg_end, &Euclidean), 1.0);
+        assert_eq!(
+            point_to_segment_distance(point, seg_start, seg_end, &Euclidean),
+            1.0
+        );
 
         // Point closest to segment start
         let point = Point::new(-1.0, 0.0);
-        assert_eq!(point_to_segment_distance(point, seg_start, seg_end, &Euclidean), 1.0);
+        assert_eq!(
+            point_to_segment_distance(point, seg_start, seg_end, &Euclidean),
+            1.0
+        );
 
         // Point closest to segment end
         let point = Point::new(3.0, 0.0);
-        assert_eq!(point_to_segment_distance(point, seg_start, seg_end, &Euclidean), 1.0);
+        assert_eq!(
+            point_to_segment_distance(point, seg_start, seg_end, &Euclidean),
+            1.0
+        );
 
         // Zero-length segment
         let point = Point::new(1.0, 1.0);
