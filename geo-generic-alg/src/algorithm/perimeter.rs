@@ -77,7 +77,7 @@ where
     for line in linestring.lines() {
         let start_coord = line.start_coord();
         let end_coord = line.end_coord();
-        let delta = start_coord - end_coord;
+        let delta = end_coord - start_coord;
         perimeter = perimeter + delta.x.hypot(delta.y);
     }
     perimeter
@@ -101,7 +101,7 @@ where
         // For a line, return its length as the perimeter
         let start_coord = self.start_coord();
         let end_coord = self.end_coord();
-        let delta = start_coord - end_coord;
+        let delta = end_coord - start_coord;
         delta.x.hypot(delta.y)
     }
 }
@@ -157,7 +157,7 @@ where
         for line in lines.iter() {
             let start_coord = line.start_coord();
             let end_coord = line.end_coord();
-            let delta = start_coord - end_coord;
+            let delta = end_coord - start_coord;
             perimeter = perimeter + delta.x.hypot(delta.y);
         }
         perimeter
