@@ -458,7 +458,7 @@ use geo_traits_ext::*;
 /// any geometry types that implement WKB traits, while maintaining all the existing
 /// cross-type distance functionality.
 pub trait DistanceExt<F: CoordFloat> {
-    /// Calculate distance using any metric space that implements Distance<F, Point<F>, Point<F>>
+    /// Calculate distance using any metric space that implements `Distance<F, Point<F>, Point<F>>`
     ///
     /// This leverages the existing comprehensive cross-type distance implementations
     /// in the metric_spaces module while adding support for WKB and other generic geometry types.
