@@ -11,8 +11,7 @@ fn generate_polygon_str(coords: &[Coord]) -> String {
         points_str.push_str(format!("{},{} ", coord.x, coord.y).as_ref());
     }
     format!(
-        "    <polygon points=\"{}\" fill=\"none\" stroke=\"black\"/>\n",
-        points_str
+        "    <polygon points=\"{points_str}\" fill=\"none\" stroke=\"black\"/>\n"
     )
 }
 
@@ -56,8 +55,7 @@ fn main() -> std::io::Result<()> {
     let width = 100;
     let height = 100;
     let svg_file_string = format!(
-        "<svg viewBox=\"50 50 {} {}\" xmlns=\"http://www.w3.org/2000/svg\">\n",
-        width, height
+        "<svg viewBox=\"50 50 {width} {height}\" xmlns=\"http://www.w3.org/2000/svg\">\n"
     );
     let norway = geo_test_fixtures::norway_main::<f64>();
     let v: Vec<_> = norway
