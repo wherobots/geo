@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use geo_generic_alg::algorithm::line_measures::{DistanceExt, Euclidean};
+use geo_generic_alg::algorithm::line_measures::{Distance, DistanceExt, Euclidean};
 use geo_generic_alg::{coord, LineString, MultiPolygon, Point, Polygon};
 
 #[path = "utils/wkb.rs"]
@@ -118,6 +118,102 @@ fn criterion_benchmark(c: &mut Criterion) {
         bencher.iter(|| {
             criterion::black_box(
                 criterion::black_box(&mp1).distance_ext(&Euclidean, criterion::black_box(&mp2)),
+            );
+        });
+    });
+
+    // ┌─────────────────────────────────────────────────────────────────┐
+    // │ Benchmarks for Original Distance Trait (Concrete Types)        │
+    // │ These test that the refactored implementation maintains         │
+    // │ backward compatibility and performance.                         │
+    // └─────────────────────────────────────────────────────────────────┘
+
+    c.bench_function("distance_concrete_point_to_point", |bencher| {
+        let p1 = Point::new(0.0, 0.0);
+        let p2 = Point::new(100.0, 100.0);
+
+        bencher.iter(|| {
+            criterion::black_box(
+                Euclidean.distance(criterion::black_box(p1), criterion::black_box(p2)),
+            );
+        });
+    });
+
+    c.bench_function("distance_concrete_linestring_to_linestring", |bencher| {
+        let ls1 = geo_test_fixtures::norway_main::<f64>();
+        let ls2 = LineString::from(vec![
+            coord!(x: 100.0, y: 100.0),
+            coord!(x: 200.0, y: 200.0),
+            coord!(x: 300.0, y: 300.0),
+        ]);
+
+        bencher.iter(|| {
+            criterion::black_box(
+                Euclidean.distance(criterion::black_box(&ls1), criterion::black_box(&ls2)),
+            );
+        });
+    });
+
+    // ┌─────────────────────────────────────────────────────────────────┐
+    // │ Benchmarks for Cross-Type Distance Calculations                │
+    // │ These test the key functionality that was the reviewer's       │
+    // │ concern: different types of input geometries.                  │
+    // └─────────────────────────────────────────────────────────────────┘
+
+    c.bench_function("distance_cross_type_point_to_linestring", |bencher| {
+        let point = Point::new(50.0, 50.0);
+        let linestring = LineString::from(vec![
+            coord!(x: 0.0, y: 0.0),
+            coord!(x: 100.0, y: 100.0),
+            coord!(x: 200.0, y: 0.0),
+        ]);
+
+        bencher.iter(|| {
+            criterion::black_box(Euclidean.distance(
+                criterion::black_box(&point),
+                criterion::black_box(&linestring),
+            ));
+        });
+    });
+
+    c.bench_function("distance_cross_type_linestring_to_polygon", |bencher| {
+        let linestring =
+            LineString::from(vec![coord!(x: -50.0, y: 50.0), coord!(x: 150.0, y: 50.0)]);
+        let polygon = Polygon::new(
+            LineString::from(vec![
+                coord!(x: 0.0, y: 0.0),
+                coord!(x: 100.0, y: 0.0),
+                coord!(x: 100.0, y: 100.0),
+                coord!(x: 0.0, y: 100.0),
+                coord!(x: 0.0, y: 0.0),
+            ]),
+            vec![],
+        );
+
+        bencher.iter(|| {
+            criterion::black_box(Euclidean.distance(
+                criterion::black_box(&linestring),
+                criterion::black_box(&polygon),
+            ));
+        });
+    });
+
+    c.bench_function("distance_cross_type_point_to_polygon", |bencher| {
+        let point = Point::new(150.0, 50.0);
+        let polygon = Polygon::new(
+            LineString::from(vec![
+                coord!(x: 0.0, y: 0.0),
+                coord!(x: 100.0, y: 0.0),
+                coord!(x: 100.0, y: 100.0),
+                coord!(x: 0.0, y: 100.0),
+                coord!(x: 0.0, y: 0.0),
+            ]),
+            vec![],
+        );
+
+        bencher.iter(|| {
+            criterion::black_box(
+                Euclidean.distance(criterion::black_box(&point), criterion::black_box(&polygon)),
             );
         });
     });
