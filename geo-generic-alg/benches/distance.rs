@@ -11,9 +11,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let p2 = Point::new(100.0, 100.0);
 
         bencher.iter(|| {
-            criterion::black_box(
-                criterion::black_box(&p1).distance_ext(&Euclidean, criterion::black_box(&p2)),
-            );
+            criterion::black_box(criterion::black_box(&p1).distance_ext(criterion::black_box(&p2)));
         });
     });
 
@@ -27,7 +25,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         bencher.iter(|| {
             criterion::black_box(
-                criterion::black_box(&ls1).distance_ext(&Euclidean, criterion::black_box(&ls2)),
+                criterion::black_box(&ls1).distance_ext(criterion::black_box(&ls2)),
             );
         });
     });
@@ -56,7 +54,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         bencher.iter(|| {
             criterion::black_box(
-                criterion::black_box(&poly1).distance_ext(&Euclidean, criterion::black_box(&poly2)),
+                criterion::black_box(&poly1).distance_ext(criterion::black_box(&poly2)),
             );
         });
     });
@@ -70,7 +68,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         bencher.iter(|| {
             let wkb_geom1 = geo_generic_tests::wkb::reader::read_wkb(&wkb_bytes1).unwrap();
             let wkb_geom2 = geo_generic_tests::wkb::reader::read_wkb(&wkb_bytes2).unwrap();
-            criterion::black_box(wkb_geom1.distance_ext(&Euclidean, &wkb_geom2));
+            criterion::black_box(wkb_geom1.distance_ext(&wkb_geom2));
         });
     });
 
@@ -87,7 +85,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         bencher.iter(|| {
             let wkb_geom1 = geo_generic_tests::wkb::reader::read_wkb(&wkb_bytes1).unwrap();
             let wkb_geom2 = geo_generic_tests::wkb::reader::read_wkb(&wkb_bytes2).unwrap();
-            criterion::black_box(wkb_geom1.distance_ext(&Euclidean, &wkb_geom2));
+            criterion::black_box(wkb_geom1.distance_ext(&wkb_geom2));
         });
     });
 
@@ -117,7 +115,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         bencher.iter(|| {
             criterion::black_box(
-                criterion::black_box(&mp1).distance_ext(&Euclidean, criterion::black_box(&mp2)),
+                criterion::black_box(&mp1).distance_ext(criterion::black_box(&mp2)),
             );
         });
     });
