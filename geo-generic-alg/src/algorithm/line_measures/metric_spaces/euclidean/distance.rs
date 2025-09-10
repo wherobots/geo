@@ -393,12 +393,63 @@ use geo_traits_ext::*;
 /// Extension trait for generic geometry types to calculate distances directly
 /// using Euclidean metric space without conversion overhead
 pub trait DistanceExt<F: CoordFloat> {
-    /// Calculate Euclidean distance directly on generic traits without conversion
+    /// Calculate Euclidean distance using generic traits without conversion overhead
     fn distance_ext(&self, other: &Self) -> F;
 }
 
-// Helper function for point distance using direct trait methods
-fn point_distance_direct<F, P1, P2>(p1: &P1, p2: &P2) -> F
+// ┌──────────────────────────────────────────────────────────┐
+// │ Generic trait macro implementations (following original) │
+// └──────────────────────────────────────────────────────────┘
+
+/// Generic trait version of polygon-like geometry distance implementation
+/// Follows the same pattern as impl_euclidean_distance_for_polygonlike_geometry!
+macro_rules! impl_distance_ext_for_polygonlike_geometry_trait {
+    ($polygonlike_trait:ident, $polygonlike_tag:ident) => {
+        impl<F, P: $polygonlike_trait<T = F>> GenericDistanceTrait<F, $polygonlike_tag> for P
+        where
+            F: GeoFloat,
+        {
+            fn generic_distance_trait(&self, other: &Self) -> F {
+                let poly1 = self.to_polygon();
+                let poly2 = other.to_polygon();
+                poly1.distance_ext(&poly2)
+            }
+        }
+    };
+}
+
+/// Generic trait version of multi-geometry distance implementation  
+/// Follows the same pattern as impl_euclidean_distance_for_iter_geometry!
+macro_rules! impl_distance_ext_for_iter_geometry_trait {
+    ($iter_trait:ident, $iter_tag:ident, $member_method:ident) => {
+        impl<F, I: $iter_trait<T = F>> GenericDistanceTrait<F, $iter_tag> for I
+        where
+            F: GeoFloat,
+        {
+            fn generic_distance_trait(&self, other: &Self) -> F {
+                let mut min_dist: F = Float::max_value();
+                for member1 in self.$member_method() {
+                    for member2 in other.$member_method() {
+                        let dist = member1.distance_ext(&member2);
+                        min_dist = min_dist.min(dist);
+                    }
+                }
+                if min_dist == Float::max_value() {
+                    F::zero()
+                } else {
+                    min_dist
+                }
+            }
+        }
+    };
+}
+
+// ┌──────────────────────────────────────────────────────────┐
+// │ Helper functions for generic trait operations              │
+// └──────────────────────────────────────────────────────────┘
+
+// Helper function for point distance using generic trait methods
+fn point_distance_generic<F, P1, P2>(p1: &P1, p2: &P2) -> F
 where
     F: CoordFloat,
     P1: PointTraitExt<T = F>,
@@ -413,8 +464,8 @@ where
     }
 }
 
-// Helper for line segment distance using direct trait methods
-fn line_segment_distance_direct<F, C, L>(coord: &C, line: &L) -> F
+// Helper for line segment distance using generic trait methods
+fn line_segment_distance_generic<F, C, L>(coord: &C, line: &L) -> F
 where
     F: CoordFloat,
     C: CoordTrait<T = F>,
@@ -443,8 +494,12 @@ where
     delta_x.hypot(delta_y)
 }
 
+// ┌──────────────────────────────────────────────────────────┐
+// │ Macros for symmetric distance implementations            │
+// └──────────────────────────────────────────────────────────┘
+
 // Macro for generating symmetric distance implementations
-macro_rules! symmetric_distance_direct_impl {
+macro_rules! symmetric_distance_generic_impl {
     ($func_name_ab:ident, $func_name_ba:ident, $trait_a:ident, $trait_b:ident) => {
         pub fn $func_name_ba<F, A, B>(b: &B, a: &A) -> F
         where
@@ -457,8 +512,12 @@ macro_rules! symmetric_distance_direct_impl {
     };
 }
 
+// ┌────────────────────────────────────────────────────────────┐
+// │ Cross-type distance functions (direct, no conversion)      │
+// └────────────────────────────────────────────────────────────┘
+
 // Point to LineString distance (direct, no conversion)
-pub fn distance_point_to_linestring_direct<F, P, LS>(point: &P, linestring: &LS) -> F
+pub fn distance_point_to_linestring_generic<F, P, LS>(point: &P, linestring: &LS) -> F
 where
     F: CoordFloat,
     P: PointTraitExt<T = F>,
@@ -467,7 +526,7 @@ where
     if let Some(coord) = point.coord() {
         linestring
             .lines()
-            .map(|line| line_segment_distance_direct(&coord, &line))
+            .map(|line| line_segment_distance_generic(&coord, &line))
             .fold(Float::max_value(), |acc, dist| acc.min(dist))
     } else {
         F::zero()
@@ -475,7 +534,7 @@ where
 }
 
 // Point to Polygon distance (direct, no conversion)
-pub fn distance_point_to_polygon_direct<F, P, Poly>(point: &P, polygon: &Poly) -> F
+pub fn distance_point_to_polygon_generic<F, P, Poly>(point: &P, polygon: &Poly) -> F
 where
     F: GeoFloat,
     P: PointTraitExt<T = F>,
@@ -484,7 +543,7 @@ where
     if let (Some(coord), Some(exterior)) = (point.coord(), polygon.exterior_ext()) {
         exterior
             .lines()
-            .map(|line| line_segment_distance_direct(&coord, &line))
+            .map(|line| line_segment_distance_generic(&coord, &line))
             .fold(Float::max_value(), |acc, dist| acc.min(dist))
     } else {
         F::zero()
@@ -492,7 +551,7 @@ where
 }
 
 // LineString to Polygon distance (direct, no conversion)
-pub fn distance_linestring_to_polygon_direct<F, LS, Poly>(linestring: &LS, polygon: &Poly) -> F
+pub fn distance_linestring_to_polygon_generic<F, LS, Poly>(linestring: &LS, polygon: &Poly) -> F
 where
     F: GeoFloat,
     LS: LineStringTraitExt<T = F>,
@@ -502,10 +561,10 @@ where
         let mut min_dist: F = Float::max_value();
         for line1 in linestring.lines() {
             for line2 in exterior.lines() {
-                let d1 = line_segment_distance_direct(&line1.start_coord(), &line2);
-                let d2 = line_segment_distance_direct(&line1.end_coord(), &line2);
-                let d3 = line_segment_distance_direct(&line2.start_coord(), &line1);
-                let d4 = line_segment_distance_direct(&line2.end_coord(), &line1);
+                let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
+                let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
+                let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
+                let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
                 let line_dist = d1.min(d2).min(d3).min(d4);
                 min_dist = min_dist.min(line_dist);
             }
@@ -520,71 +579,91 @@ where
     }
 }
 
+// ┌────────────────────────────────────────────────────────────┐
+// │ Generate symmetric functions using macros                  │
+// └────────────────────────────────────────────────────────────┘
+
 // Generate symmetric functions
-symmetric_distance_direct_impl!(
-    distance_point_to_linestring_direct,
-    distance_linestring_to_point_direct,
+symmetric_distance_generic_impl!(
+    distance_point_to_linestring_generic,
+    distance_linestring_to_point_generic,
     PointTraitExt,
     LineStringTraitExt
 );
 
-symmetric_distance_direct_impl!(
-    distance_point_to_polygon_direct,
-    distance_polygon_to_point_direct,
+symmetric_distance_generic_impl!(
+    distance_point_to_polygon_generic,
+    distance_polygon_to_point_generic,
     PointTraitExt,
     PolygonTraitExt
 );
 
-symmetric_distance_direct_impl!(
-    distance_linestring_to_polygon_direct,
-    distance_polygon_to_linestring_direct,
+symmetric_distance_generic_impl!(
+    distance_linestring_to_polygon_generic,
+    distance_polygon_to_linestring_generic,
     LineStringTraitExt,
     PolygonTraitExt
 );
+
+// ┌────────────────────────────────────────────────────────────┐
+// │ DistanceExt trait implementation using type-tag pattern   │
+// └────────────────────────────────────────────────────────────┘
 
 // Implementation of DistanceExt for generic trait geometries using the type-tag pattern
 impl<F, G> DistanceExt<F> for G
 where
     F: GeoFloat,
-    G: GeoTraitExtWithTypeTag + DirectDistanceTrait<F, G::Tag>,
+    G: GeoTraitExtWithTypeTag + GenericDistanceTrait<F, G::Tag>,
 {
     fn distance_ext(&self, other: &Self) -> F {
-        self.direct_distance_trait(other)
+        self.generic_distance_trait(other)
     }
 }
+
+// ┌────────────────────────────────────────────────────────────┐
+// │ Internal trait for direct distance calculations            │
+// └────────────────────────────────────────────────────────────┘
 
 // Internal trait for direct distance calculations without conversion
-trait DirectDistanceTrait<F, GT: GeoTypeTag>
+trait GenericDistanceTrait<F, GT: GeoTypeTag>
 where
     F: GeoFloat,
 {
-    fn direct_distance_trait(&self, other: &Self) -> F;
+    fn generic_distance_trait(&self, other: &Self) -> F;
 }
 
+// ┌────────────────────────────────────────────────────────────┐
+// │ Implementations for Point (generic traits)                │
+// └────────────────────────────────────────────────────────────┘
+
 // Point-to-Point direct distance implementation
-impl<F, P: PointTraitExt<T = F>> DirectDistanceTrait<F, PointTag> for P
+impl<F, P: PointTraitExt<T = F>> GenericDistanceTrait<F, PointTag> for P
 where
     F: GeoFloat,
 {
-    fn direct_distance_trait(&self, other: &Self) -> F {
-        point_distance_direct(self, other)
+    fn generic_distance_trait(&self, other: &Self) -> F {
+        point_distance_generic(self, other)
     }
 }
 
+// ┌────────────────────────────────────────────────────────────┐
+// │ Implementations for LineString (generic traits)           │
+// └────────────────────────────────────────────────────────────┘
+
 // LineString-to-LineString direct distance implementation
-impl<F, LS: LineStringTraitExt<T = F>> DirectDistanceTrait<F, LineStringTag> for LS
+impl<F, LS: LineStringTraitExt<T = F>> GenericDistanceTrait<F, LineStringTag> for LS
 where
     F: GeoFloat,
 {
-    fn direct_distance_trait(&self, other: &Self) -> F {
+    fn generic_distance_trait(&self, other: &Self) -> F {
         let mut min_dist: F = Float::max_value();
         for line1 in self.lines() {
             for line2 in other.lines() {
                 // Line-to-line distance using endpoints
-                let d1 = line_segment_distance_direct(&line1.start_coord(), &line2);
-                let d2 = line_segment_distance_direct(&line1.end_coord(), &line2);
-                let d3 = line_segment_distance_direct(&line2.start_coord(), &line1);
-                let d4 = line_segment_distance_direct(&line2.end_coord(), &line1);
+                let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
+                let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
+                let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
+                let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
                 let line_dist = d1.min(d2).min(d3).min(d4);
                 min_dist = min_dist.min(line_dist);
             }
@@ -597,12 +676,16 @@ where
     }
 }
 
+// ┌────────────────────────────────────────────────────────────┐
+// │ Implementations for Polygon (generic traits)              │
+// └────────────────────────────────────────────────────────────┘
+
 // Polygon-to-Polygon direct distance implementation
-impl<F, P: PolygonTraitExt<T = F>> DirectDistanceTrait<F, PolygonTag> for P
+impl<F, P: PolygonTraitExt<T = F>> GenericDistanceTrait<F, PolygonTag> for P
 where
     F: GeoFloat,
 {
-    fn direct_distance_trait(&self, other: &Self) -> F {
+    fn generic_distance_trait(&self, other: &Self) -> F {
         if let (Some(ext1), Some(ext2)) = (self.exterior_ext(), other.exterior_ext()) {
             ext1.distance_ext(&ext2)
         } else {
@@ -611,73 +694,35 @@ where
     }
 }
 
-// Multi-geometry implementations
-impl<F, MP: MultiPointTraitExt<T = F>> DirectDistanceTrait<F, MultiPointTag> for MP
-where
-    F: GeoFloat,
-{
-    fn direct_distance_trait(&self, other: &Self) -> F {
-        let mut min_dist: F = Float::max_value();
-        for p1 in self.points_ext() {
-            for p2 in other.points_ext() {
-                let dist = p1.distance_ext(&p2);
-                min_dist = min_dist.min(dist);
-            }
-        }
-        if min_dist == Float::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
+// ┌────────────────────────────────────────────────────────────┐
+// │ Implementations for Rect and Triangle (generic traits)     │
+// └────────────────────────────────────────────────────────────┘
 
-impl<F, MLS: MultiLineStringTraitExt<T = F>> DirectDistanceTrait<F, MultiLineStringTag> for MLS
-where
-    F: GeoFloat,
-{
-    fn direct_distance_trait(&self, other: &Self) -> F {
-        let mut min_dist: F = Float::max_value();
-        for ls1 in self.line_strings_ext() {
-            for ls2 in other.line_strings_ext() {
-                let dist = ls1.distance_ext(&ls2);
-                min_dist = min_dist.min(dist);
-            }
-        }
-        if min_dist == Float::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
+impl_distance_ext_for_polygonlike_geometry_trait!(TriangleTraitExt, TriangleTag);
+impl_distance_ext_for_polygonlike_geometry_trait!(RectTraitExt, RectTag);
 
-impl<F, MP: MultiPolygonTraitExt<T = F>> DirectDistanceTrait<F, MultiPolygonTag> for MP
-where
-    F: GeoFloat,
-{
-    fn direct_distance_trait(&self, other: &Self) -> F {
-        let mut min_dist: F = Float::max_value();
-        for p1 in self.polygons_ext() {
-            for p2 in other.polygons_ext() {
-                let dist = p1.distance_ext(&p2);
-                min_dist = min_dist.min(dist);
-            }
-        }
-        if min_dist == Float::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
+// ┌────────────────────────────────────────────────────────────┐
+// │ Implementations for multi-geometry types (generic traits)  │
+// └────────────────────────────────────────────────────────────┘
 
-// Geometry with runtime type dispatch for cross-type calculations
-impl<F, G: GeometryTraitExt<T = F>> DirectDistanceTrait<F, GeometryTag> for G
+impl_distance_ext_for_iter_geometry_trait!(MultiPointTraitExt, MultiPointTag, points_ext);
+impl_distance_ext_for_iter_geometry_trait!(
+    MultiLineStringTraitExt,
+    MultiLineStringTag,
+    line_strings_ext
+);
+impl_distance_ext_for_iter_geometry_trait!(MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
+
+// ┌────────────────────────────────────────────────────────────┐
+// │ Implementation for Geometry (generic traits)               │
+// └────────────────────────────────────────────────────────────┘
+
+// Generic trait distance implementation for Geometry dispatch.
+impl<F, G: GeometryTraitExt<T = F>> GenericDistanceTrait<F, GeometryTag> for G
 where
     F: GeoFloat,
 {
-    fn direct_distance_trait(&self, other: &Self) -> F {
+    fn generic_distance_trait(&self, other: &Self) -> F {
         use geo_traits_ext::GeometryTypeExt;
 
         match (self.as_type_ext(), other.as_type_ext()) {
@@ -690,24 +735,24 @@ where
                 poly1.distance_ext(poly2)
             }
 
-            // Cross-type combinations using direct helper functions
+            // Cross-type combinations using generic helper functions
             (GeometryTypeExt::Point(point), GeometryTypeExt::LineString(linestring)) => {
-                distance_point_to_linestring_direct(point, linestring)
+                distance_point_to_linestring_generic(point, linestring)
             }
             (GeometryTypeExt::LineString(linestring), GeometryTypeExt::Point(point)) => {
-                distance_linestring_to_point_direct(linestring, point)
+                distance_linestring_to_point_generic(linestring, point)
             }
             (GeometryTypeExt::Point(point), GeometryTypeExt::Polygon(polygon)) => {
-                distance_point_to_polygon_direct(point, polygon)
+                distance_point_to_polygon_generic(point, polygon)
             }
             (GeometryTypeExt::Polygon(polygon), GeometryTypeExt::Point(point)) => {
-                distance_polygon_to_point_direct(polygon, point)
+                distance_polygon_to_point_generic(polygon, point)
             }
             (GeometryTypeExt::LineString(linestring), GeometryTypeExt::Polygon(polygon)) => {
-                distance_linestring_to_polygon_direct(linestring, polygon)
+                distance_linestring_to_polygon_generic(linestring, polygon)
             }
             (GeometryTypeExt::Polygon(polygon), GeometryTypeExt::LineString(linestring)) => {
-                distance_polygon_to_linestring_direct(polygon, linestring)
+                distance_polygon_to_linestring_generic(polygon, linestring)
             }
 
             // Multi-geometry combinations
@@ -719,6 +764,34 @@ where
             }
             (GeometryTypeExt::MultiPolygon(mp1), GeometryTypeExt::MultiPolygon(mp2)) => {
                 mp1.distance_ext(mp2)
+            }
+
+            // Rect and Triangle combinations
+            (GeometryTypeExt::Rect(rect1), GeometryTypeExt::Rect(rect2)) => {
+                rect1.distance_ext(rect2)
+            }
+            (GeometryTypeExt::Triangle(tri1), GeometryTypeExt::Triangle(tri2)) => {
+                tri1.distance_ext(tri2)
+            }
+
+            // Cross-type combinations with Rect
+            (GeometryTypeExt::Point(point), GeometryTypeExt::Rect(rect)) => {
+                let poly = rect.to_polygon();
+                distance_point_to_polygon_generic(point, &poly)
+            }
+            (GeometryTypeExt::Rect(rect), GeometryTypeExt::Point(point)) => {
+                let poly = rect.to_polygon();
+                distance_polygon_to_point_generic(&poly, point)
+            }
+
+            // Cross-type combinations with Triangle
+            (GeometryTypeExt::Point(point), GeometryTypeExt::Triangle(tri)) => {
+                let poly = tri.to_polygon();
+                distance_point_to_polygon_generic(point, &poly)
+            }
+            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Point(point)) => {
+                let poly = tri.to_polygon();
+                distance_polygon_to_point_generic(&poly, point)
             }
 
             // For unsupported combinations, return zero
