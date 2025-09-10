@@ -156,8 +156,7 @@ impl<F: GeoFloat> Distance<F, &Line<F>, &Polygon<F>> for Euclidean {
             return F::zero();
         }
 
-        // REVIEW: This impl changed slightly.
-        std::iter::once(polygon.exterior())
+                std::iter::once(polygon.exterior())
             .chain(polygon.interiors().iter())
             .fold(Bounded::max_value(), |acc, line_string| {
                 acc.min(self.distance(line, line_string))
@@ -384,94 +383,29 @@ fn ring_contains_coord<T: GeoNum>(ring: &LineString<T>, c: Coord<T>) -> bool {
     }
 }
 
-// ┌─────────────────────────────────────────────────────────────────────────────────┐
-// │ Extended implementations for cross-type geometry distance with WKB traits       │
-// └─────────────────────────────────────────────────────────────────────────────────┘
-
-// The key insight is that we can extend the existing macro-based approach to work with
-// additional geometry types by carefully avoiding conflicts. Here's how we can add
-// support for custom geometry types that implement WKB traits without conflicting
-// with existing concrete implementations.
-
-// Example: Adding distance support for a custom Point type that implements PointTraitExt
-// This demonstrates the pattern for extending distance calculations to new geometry types.
-//
-// Note: This is commented out to avoid actual conflicts, but shows the correct approach:
-//
-// ```rust,ignore
-// // For custom geometry types that implement WKB traits, we can add specific implementations
-// impl<F> Distance<F, CustomPoint<F>, Point<F>> for Euclidean
-// where
-//     F: CoordFloat,
-//     CustomPoint<F>: PointTraitExt<T = F>,
-// {
-//     fn distance(&self, origin: CustomPoint<F>, destination: Point<F>) -> F {
-//         let origin_coord = origin.coord();
-//         let dest_coord = destination.0;
-//         let delta = origin_coord - dest_coord;
-//         delta.x.hypot(delta.y)
-//     }
-// }
-//
-// // The symmetric implementation
-// symmetric_distance_impl!(CoordFloat, Point<F>, CustomPoint<F>);
-// ```
-
-// The proper solution for full cross-type geometry support would be:
-// 1. Create a separate trait hierarchy that doesn't conflict with existing implementations
-// 2. Use associated types or type parameters to distinguish between concrete and generic types
-// 3. Implement a dispatch mechanism that can choose between concrete and generic implementations
-// 4. This would require coordination between geo-types, geo-traits, and geo-generic-alg crates
-
-// CORRECTION: The reviewer was RIGHT about the duplication issue!
-//
-// Problem identified:
-// 1. `algorithm/line_measures/distance.rs` creates a NEW DistanceExt trait with WKB support
-// 2. But that implementation DUPLICATES logic and DOESN'T support cross-type calculations
-//    (see distance.rs:535-540 where it returns infinity for cross-type combinations)
-// 3. Meanwhile THIS file (metric_spaces/euclidean/distance.rs) has the proper cross-type support
-//
-// The issue is NOT that cross-type distance doesn't work - it DOES work in this file.
-// The issue is that there are TWO competing distance implementations:
-// - distance.rs: Generic WKB but NO cross-type support (returns infinity)
-// - metric_spaces/euclidean/distance.rs: Full cross-type support but concrete types only
-//
-// SOLUTION: Instead of duplicating implementations, extend THIS existing metric space
-// implementation to work with WKB traits while maintaining all cross-type functionality.
-//
-// The correct approach is to:
-// 1. Remove the duplicate DistanceExt implementation in distance.rs
-// 2. Extend this metric space implementation with WKB trait support
-// 3. Keep all the existing cross-type distance functionality
-//
-// This addresses the reviewer's concern: "refactoring the metric_space/euclidean module
-// to work with traits" rather than creating competing implementations.
-
-// ┌─────────────────────────────────────────────────────────────────────────────────────┐
-// │ WKB Trait Extensions for Existing Cross-Type Distance Functionality                  │
-// └─────────────────────────────────────────────────────────────────────────────────────┘
-
 use geo_traits::{CoordTrait, LineStringTrait};
 use geo_traits_ext::*;
 
 /// Extension trait that enables the existing Distance implementations to work with
-/// any geometry types that implement WKB traits, while maintaining all the existing
+/// any geometry types that implement generic traits, while maintaining all the existing
 /// cross-type distance functionality.
 pub trait DistanceExt<F: CoordFloat> {
     /// Calculate distance using any metric space that implements `Distance<F, Point<F>, Point<F>>`
     ///
     /// This leverages the existing comprehensive cross-type distance implementations
-    /// in the metric_spaces module while adding support for WKB and other generic geometry types.
+    /// in the metric_spaces module while adding support for generic geometry types.
     fn distance_ext(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>, other: &Self) -> F;
 }
 
-/// Helper function to convert WKB geometry to concrete Point for distance calculation
-fn extract_point_from_wkb<F: CoordFloat, G: PointTraitExt<T = F>>(geom: &G) -> Option<Point<F>> {
+/// Helper function to convert generic trait geometry to concrete Point for distance calculation
+fn extract_point_from_generic<F: CoordFloat, G: PointTraitExt<T = F>>(
+    geom: &G,
+) -> Option<Point<F>> {
     geom.coord().map(|coord| Point::new(coord.x(), coord.y()))
 }
 
-/// Helper function to convert WKB geometry to concrete LineString for distance calculation
-fn extract_linestring_from_wkb<F: CoordFloat, G: LineStringTraitExt<T = F>>(
+/// Helper function to convert generic trait geometry to concrete LineString for distance calculation
+fn extract_linestring_from_generic<F: CoordFloat, G: LineStringTraitExt<T = F>>(
     geom: &G,
 ) -> LineString<F> {
     let coords: Vec<_> = geom
@@ -484,8 +418,8 @@ fn extract_linestring_from_wkb<F: CoordFloat, G: LineStringTraitExt<T = F>>(
     LineString::new(coords)
 }
 
-/// Helper function to convert WKB geometry to concrete Polygon for distance calculation
-fn extract_polygon_from_wkb<F: CoordFloat, G: PolygonTraitExt<T = F>>(
+/// Helper function to convert generic trait geometry to concrete Polygon for distance calculation
+fn extract_polygon_from_generic<F: CoordFloat, G: PolygonTraitExt<T = F>>(
     geom: &G,
 ) -> Option<Polygon<F>> {
     let exterior = geom.exterior()?;
@@ -514,41 +448,43 @@ fn extract_polygon_from_wkb<F: CoordFloat, G: PolygonTraitExt<T = F>>(
     Some(Polygon::new(LineString::new(exterior_coords), holes))
 }
 
-// Implementation of DistanceExt for WKB geometries using the type-tag pattern
+// Implementation of DistanceExt for generic trait geometries using the type-tag pattern
 impl<F, G> DistanceExt<F> for G
 where
     F: GeoFloat, // Use GeoFloat to support polygon operations
-    G: GeoTraitExtWithTypeTag + WkbDistanceTrait<F, G::Tag>,
+    G: GeoTraitExtWithTypeTag + GenericDistanceTrait<F, G::Tag>,
 {
     fn distance_ext(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>, other: &Self) -> F {
-        self.wkb_distance_trait(metric_space, other)
+        self.generic_distance_trait(metric_space, other)
     }
 }
 
 // Internal trait that dispatches to appropriate distance calculation based on geometry types
-trait WkbDistanceTrait<F, GT: GeoTypeTag>
+trait GenericDistanceTrait<F, GT: GeoTypeTag>
 where
     F: GeoFloat,
 {
-    fn wkb_distance_trait(
+    fn generic_distance_trait(
         &self,
         metric_space: &impl Distance<F, Point<F>, Point<F>>,
         other: &Self,
     ) -> F;
 }
 
-// Point-to-Point WKB distance using existing metric space implementation
-impl<F, P: PointTraitExt<T = F>> WkbDistanceTrait<F, PointTag> for P
+// Point-to-Point generic trait distance using existing metric space implementation
+impl<F, P: PointTraitExt<T = F>> GenericDistanceTrait<F, PointTag> for P
 where
     F: GeoFloat,
 {
-    fn wkb_distance_trait(
+    fn generic_distance_trait(
         &self,
         metric_space: &impl Distance<F, Point<F>, Point<F>>,
         other: &Self,
     ) -> F {
-        if let (Some(p1), Some(p2)) = (extract_point_from_wkb(self), extract_point_from_wkb(other))
-        {
+        if let (Some(p1), Some(p2)) = (
+            extract_point_from_generic(self),
+            extract_point_from_generic(other),
+        ) {
             // Use existing Point-to-Point distance implementation
             metric_space.distance(p1, p2)
         } else {
@@ -557,37 +493,37 @@ where
     }
 }
 
-// LineString-to-LineString WKB distance using existing metric space implementation
-impl<F, LS: LineStringTraitExt<T = F>> WkbDistanceTrait<F, LineStringTag> for LS
+// LineString-to-LineString generic trait distance using existing metric space implementation
+impl<F, LS: LineStringTraitExt<T = F>> GenericDistanceTrait<F, LineStringTag> for LS
 where
     F: GeoFloat,
 {
-    fn wkb_distance_trait(
+    fn generic_distance_trait(
         &self,
         _metric_space: &impl Distance<F, Point<F>, Point<F>>,
         other: &Self,
     ) -> F {
-        let ls1 = extract_linestring_from_wkb(self);
-        let ls2 = extract_linestring_from_wkb(other);
+        let ls1 = extract_linestring_from_generic(self);
+        let ls2 = extract_linestring_from_generic(other);
 
         // Use existing LineString-to-LineString distance implementation from metric space
         Euclidean.distance(&ls1, &ls2)
     }
 }
 
-// Polygon-to-Polygon WKB distance using existing metric space implementation
-impl<F, P: PolygonTraitExt<T = F>> WkbDistanceTrait<F, PolygonTag> for P
+// Polygon-to-Polygon generic trait distance using existing metric space implementation
+impl<F, P: PolygonTraitExt<T = F>> GenericDistanceTrait<F, PolygonTag> for P
 where
     F: GeoFloat,
 {
-    fn wkb_distance_trait(
+    fn generic_distance_trait(
         &self,
         _metric_space: &impl Distance<F, Point<F>, Point<F>>,
         other: &Self,
     ) -> F {
         if let (Some(poly1), Some(poly2)) = (
-            extract_polygon_from_wkb(self),
-            extract_polygon_from_wkb(other),
+            extract_polygon_from_generic(self),
+            extract_polygon_from_generic(other),
         ) {
             // Use existing Polygon-to-Polygon distance implementation from metric space
             Euclidean.distance(&poly1, &poly2)
@@ -597,12 +533,12 @@ where
     }
 }
 
-// Multi-geometry WKB distance implementations
-impl<F, MP: MultiPointTraitExt<T = F>> WkbDistanceTrait<F, MultiPointTag> for MP
+// Multi-geometry generic trait distance implementations
+impl<F, MP: MultiPointTraitExt<T = F>> GenericDistanceTrait<F, MultiPointTag> for MP
 where
     F: GeoFloat,
 {
-    fn wkb_distance_trait(
+    fn generic_distance_trait(
         &self,
         _metric_space: &impl Distance<F, Point<F>, Point<F>>,
         other: &Self,
@@ -610,11 +546,11 @@ where
         // Convert to concrete MultiPoint and use existing implementation
         let points1: Vec<_> = self
             .points_ext()
-            .filter_map(|p| extract_point_from_wkb(&p))
+            .filter_map(|p| extract_point_from_generic(&p))
             .collect();
         let points2: Vec<_> = other
             .points_ext()
-            .filter_map(|p| extract_point_from_wkb(&p))
+            .filter_map(|p| extract_point_from_generic(&p))
             .collect();
 
         let mp1 = MultiPoint::new(points1);
@@ -624,11 +560,11 @@ where
     }
 }
 
-impl<F, MLS: MultiLineStringTraitExt<T = F>> WkbDistanceTrait<F, MultiLineStringTag> for MLS
+impl<F, MLS: MultiLineStringTraitExt<T = F>> GenericDistanceTrait<F, MultiLineStringTag> for MLS
 where
     F: GeoFloat,
 {
-    fn wkb_distance_trait(
+    fn generic_distance_trait(
         &self,
         _metric_space: &impl Distance<F, Point<F>, Point<F>>,
         other: &Self,
@@ -636,11 +572,11 @@ where
         // Convert to concrete MultiLineString and use existing implementation
         let linestrings1: Vec<_> = self
             .line_strings_ext()
-            .map(|ls| extract_linestring_from_wkb(&ls))
+            .map(|ls| extract_linestring_from_generic(&ls))
             .collect();
         let linestrings2: Vec<_> = other
             .line_strings_ext()
-            .map(|ls| extract_linestring_from_wkb(&ls))
+            .map(|ls| extract_linestring_from_generic(&ls))
             .collect();
 
         let mls1 = MultiLineString::new(linestrings1);
@@ -650,11 +586,11 @@ where
     }
 }
 
-impl<F, MP: MultiPolygonTraitExt<T = F>> WkbDistanceTrait<F, MultiPolygonTag> for MP
+impl<F, MP: MultiPolygonTraitExt<T = F>> GenericDistanceTrait<F, MultiPolygonTag> for MP
 where
     F: GeoFloat,
 {
-    fn wkb_distance_trait(
+    fn generic_distance_trait(
         &self,
         _metric_space: &impl Distance<F, Point<F>, Point<F>>,
         other: &Self,
@@ -662,11 +598,11 @@ where
         // Convert to concrete MultiPolygon and use existing implementation
         let polygons1: Vec<_> = self
             .polygons_ext()
-            .filter_map(|p| extract_polygon_from_wkb(&p))
+            .filter_map(|p| extract_polygon_from_generic(&p))
             .collect();
         let polygons2: Vec<_> = other
             .polygons_ext()
-            .filter_map(|p| extract_polygon_from_wkb(&p))
+            .filter_map(|p| extract_polygon_from_generic(&p))
             .collect();
 
         let mp1 = MultiPolygon::new(polygons1);
@@ -676,12 +612,12 @@ where
     }
 }
 
-// Geometry WKB distance with runtime type dispatch - supports cross-type calculations!
-impl<F, G: GeometryTraitExt<T = F>> WkbDistanceTrait<F, GeometryTag> for G
+// Geometry generic trait distance with runtime type dispatch - supports cross-type calculations!
+impl<F, G: GeometryTraitExt<T = F>> GenericDistanceTrait<F, GeometryTag> for G
 where
     F: GeoFloat,
 {
-    fn wkb_distance_trait(
+    fn generic_distance_trait(
         &self,
         metric_space: &impl Distance<F, Point<F>, Point<F>>,
         other: &Self,
@@ -691,28 +627,28 @@ where
         match (self.as_type_ext(), other.as_type_ext()) {
             // Same-type combinations - use existing comprehensive implementations
             (GeometryTypeExt::Point(p1), GeometryTypeExt::Point(p2)) => {
-                p1.wkb_distance_trait(metric_space, p2)
+                p1.generic_distance_trait(metric_space, p2)
             }
             (GeometryTypeExt::LineString(ls1), GeometryTypeExt::LineString(ls2)) => {
-                ls1.wkb_distance_trait(metric_space, ls2)
+                ls1.generic_distance_trait(metric_space, ls2)
             }
             (GeometryTypeExt::Polygon(poly1), GeometryTypeExt::Polygon(poly2)) => {
-                poly1.wkb_distance_trait(metric_space, poly2)
+                poly1.generic_distance_trait(metric_space, poly2)
             }
             (GeometryTypeExt::MultiPoint(mp1), GeometryTypeExt::MultiPoint(mp2)) => {
-                mp1.wkb_distance_trait(metric_space, mp2)
+                mp1.generic_distance_trait(metric_space, mp2)
             }
             (GeometryTypeExt::MultiLineString(mls1), GeometryTypeExt::MultiLineString(mls2)) => {
-                mls1.wkb_distance_trait(metric_space, mls2)
+                mls1.generic_distance_trait(metric_space, mls2)
             }
             (GeometryTypeExt::MultiPolygon(mp1), GeometryTypeExt::MultiPolygon(mp2)) => {
-                mp1.wkb_distance_trait(metric_space, mp2)
+                mp1.generic_distance_trait(metric_space, mp2)
             }
 
             // Cross-type combinations - leverage existing metric space cross-type support
             (GeometryTypeExt::Point(point), GeometryTypeExt::LineString(linestring)) => {
-                if let Some(p) = extract_point_from_wkb(point) {
-                    let ls = extract_linestring_from_wkb(linestring);
+                if let Some(p) = extract_point_from_generic(point) {
+                    let ls = extract_linestring_from_generic(linestring);
                     // Use existing Point-to-LineString distance implementation
                     Euclidean.distance(&p, &ls)
                 } else {
@@ -720,8 +656,8 @@ where
                 }
             }
             (GeometryTypeExt::LineString(linestring), GeometryTypeExt::Point(point)) => {
-                if let Some(p) = extract_point_from_wkb(point) {
-                    let ls = extract_linestring_from_wkb(linestring);
+                if let Some(p) = extract_point_from_generic(point) {
+                    let ls = extract_linestring_from_generic(linestring);
                     // Use existing LineString-to-Point distance (symmetric)
                     Euclidean.distance(&ls, &p)
                 } else {
@@ -730,8 +666,8 @@ where
             }
             (GeometryTypeExt::Point(point), GeometryTypeExt::Polygon(polygon)) => {
                 if let (Some(p), Some(poly)) = (
-                    extract_point_from_wkb(point),
-                    extract_polygon_from_wkb(polygon),
+                    extract_point_from_generic(point),
+                    extract_polygon_from_generic(polygon),
                 ) {
                     // Use existing Point-to-Polygon distance implementation
                     Euclidean.distance(&p, &poly)
@@ -741,8 +677,8 @@ where
             }
             (GeometryTypeExt::Polygon(polygon), GeometryTypeExt::Point(point)) => {
                 if let (Some(p), Some(poly)) = (
-                    extract_point_from_wkb(point),
-                    extract_polygon_from_wkb(polygon),
+                    extract_point_from_generic(point),
+                    extract_polygon_from_generic(polygon),
                 ) {
                     // Use existing Polygon-to-Point distance (symmetric)
                     Euclidean.distance(&poly, &p)
@@ -751,8 +687,8 @@ where
                 }
             }
             (GeometryTypeExt::LineString(linestring), GeometryTypeExt::Polygon(polygon)) => {
-                if let Some(poly) = extract_polygon_from_wkb(polygon) {
-                    let ls = extract_linestring_from_wkb(linestring);
+                if let Some(poly) = extract_polygon_from_generic(polygon) {
+                    let ls = extract_linestring_from_generic(linestring);
                     // Use existing LineString-to-Polygon distance implementation
                     Euclidean.distance(&ls, &poly)
                 } else {
@@ -760,8 +696,8 @@ where
                 }
             }
             (GeometryTypeExt::Polygon(polygon), GeometryTypeExt::LineString(linestring)) => {
-                if let Some(poly) = extract_polygon_from_wkb(polygon) {
-                    let ls = extract_linestring_from_wkb(linestring);
+                if let Some(poly) = extract_polygon_from_generic(polygon) {
+                    let ls = extract_linestring_from_generic(linestring);
                     // Use existing Polygon-to-LineString distance (symmetric)
                     Euclidean.distance(&poly, &ls)
                 } else {
