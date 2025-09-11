@@ -801,14 +801,21 @@ where
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use crate::orient::{Direction, Orient};
     use crate::{Line, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon};
     use geo_types::{coord, polygon, private_utils::line_segment_distance};
 
-    #[test]
-    fn line_segment_distance_test() {
+    // ┌────────────────────────────────────────────────────────────────┐
+    // │ Tests for original Distance trait (concrete implementations)   │
+    // └────────────────────────────────────────────────────────────────┘
+    
+    mod original_distance_tests {
+        use super::*;
+
+        #[test]
+        fn line_segment_distance_test() {
         let o1 = Point::new(8.0, 0.0);
         let o2 = Point::new(5.5, 0.0);
         let o3 = Point::new(5.0, 0.0);
@@ -1496,4 +1503,214 @@ mod test {
         let test_gc = GeometryCollection(vec![Geometry::Rect(test_rect)]);
         assert_relative_eq!(Euclidean.distance(&test_gc, &gc), 60.959002616512684);
     }
-}
+    } // End of original_distance_tests module
+
+    // ┌─────────────────────────────────────────────────────────────────┐
+    // │ Tests for DistanceExt trait (Generic WKB implementations)      │
+    // └─────────────────────────────────────────────────────────────────┘
+    
+    mod distance_ext_tests {
+        use super::*;
+
+    #[test]
+    fn distance_ext_point_to_point_test() {
+        let p1 = Point::new(0., 0.);
+        let p2 = Point::new(1., 0.);
+        assert_relative_eq!(p1.distance_ext(&p2), 1.);
+    }
+
+    #[test]
+    fn distance_ext_point_to_point_test_2() {
+        let p1 = Point::new(-72.1235, 42.3521);
+        let p2 = Point::new(72.1260, 70.612);
+        let dist = p1.distance_ext(&p2);
+        assert_relative_eq!(dist, 146.99163308930207);
+    }
+
+    #[test]
+    fn distance_ext_point_to_point_distance_test() {
+        // Test specific point distances that match original test cases
+        let p1 = Point::new(2.5, 0.5);
+        let p2 = Point::new(5., 1.);
+        let dist = p1.distance_ext(&p2);
+        // This should give us the distance between these two specific points
+        assert!(dist > 0.0);
+    }
+
+    #[test]
+    fn distance_ext_linestring_distance_test() {
+        // Test LineString to LineString distances
+        let points1 = vec![
+            (5., 1.),
+            (4., 2.),
+            (4., 3.),
+            (5., 4.),
+            (6., 4.),
+            (7., 3.),
+            (7., 2.),
+            (6., 1.),
+        ];
+        let points2 = vec![
+            (8., 1.),
+            (9., 2.),
+            (9., 3.),
+            (8., 4.),
+        ];
+        let ls1 = LineString::from(points1);
+        let ls2 = LineString::from(points2);
+        let dist = ls1.distance_ext(&ls2);
+        assert_relative_eq!(dist, 1.4142135623730951); // sqrt(2)
+    }
+
+    #[test]
+    fn distance_ext_linestring_contains_test() {
+        // Test LineString to same LineString (should be 0)
+        let points = vec![
+            (5., 1.),
+            (4., 2.),
+            (4., 3.),
+            (5., 4.),
+            (6., 4.),
+            (7., 3.),
+            (7., 2.),
+            (6., 1.),
+        ];
+        let ls = LineString::from(points);
+        let dist = ls.distance_ext(&ls);
+        assert_relative_eq!(dist, 0.0);
+    }
+
+    #[test]
+    fn distance_ext_linestring_to_linestring_test() {
+        let ls1: LineString<f64> = vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)].into();
+        let ls2: LineString<f64> = vec![(3.0, 0.0), (4.0, 1.0), (5.0, 0.0)].into();
+        let dist = ls1.distance_ext(&ls2);
+        assert_relative_eq!(dist, 1.0);
+    }
+
+    #[test]
+    fn distance_ext_polygon_to_polygon_test() {
+        let points1 = vec![
+            (0., 0.),
+            (2., 0.),
+            (2., 2.),
+            (0., 2.),
+            (0., 0.),
+        ];
+        let points2 = vec![
+            (3., 0.),
+            (5., 0.),
+            (5., 2.),
+            (3., 2.),
+            (3., 0.),
+        ];
+        let poly1 = Polygon::new(LineString::from(points1), vec![]);
+        let poly2 = Polygon::new(LineString::from(points2), vec![]);
+        let dist = poly1.distance_ext(&poly2);
+        assert_relative_eq!(dist, 1.0);
+    }
+
+    #[test]
+    fn distance_ext_multipoint_test() {
+        let v = vec![
+            Point::new(0.0, 10.0),
+            Point::new(1.0, 1.0),
+            Point::new(10.0, 0.0),
+            Point::new(1.0, -1.0),
+            Point::new(0.0, -10.0),
+            Point::new(-1.0, -1.0),
+            Point::new(-10.0, 0.0),
+            Point::new(-1.0, 1.0),
+            Point::new(0.0, 10.0),
+        ];
+        let mp1 = MultiPoint::new(v.clone());
+        let mp2 = MultiPoint::new(vec![Point::new(50.0, 50.0)]);
+        let dist = mp1.distance_ext(&mp2);
+        assert_relative_eq!(dist, 64.03124237432849);
+    }
+
+    #[test]
+    fn distance_ext_multilinestring_test() {
+        let v1 = LineString::from(vec![(0.0, 0.0), (1.0, 10.0)]);
+        let v2 = LineString::from(vec![(1.0, 10.0), (2.0, 0.0), (3.0, 1.0)]);
+        let mls1 = MultiLineString::new(vec![v1, v2]);
+        
+        let v3 = LineString::from(vec![(50.0, 50.0), (51.0, 60.0)]);
+        let mls2 = MultiLineString::new(vec![v3]);
+        
+        let dist = mls1.distance_ext(&mls2);
+        assert_relative_eq!(dist, 63.25345840347388);
+    }
+
+    #[test]
+    fn distance_ext_multipolygon_test() {
+        let ls1 = LineString::from(vec![(0.0, 0.0), (1.0, 10.0), (2.0, 0.0), (0.0, 0.0)]);
+        let ls2 = LineString::from(vec![(3.0, 0.0), (4.0, 10.0), (5.0, 0.0), (3.0, 0.0)]);
+        let p1 = Polygon::new(ls1, vec![]);
+        let p2 = Polygon::new(ls2, vec![]);
+        let mp1 = MultiPolygon::new(vec![p1, p2]);
+        
+        let ls3 = LineString::from(vec![(50.0, 50.0), (51.0, 60.0), (52.0, 50.0), (50.0, 50.0)]);
+        let p3 = Polygon::new(ls3, vec![]);
+        let mp2 = MultiPolygon::new(vec![p3]);
+        
+        let dist = mp1.distance_ext(&mp2);
+        assert_relative_eq!(dist, 60.959002616512684);
+    }
+
+    #[test]
+    fn distance_ext_triangle_test() {
+        use geo_types::Triangle;
+        let tri1 = Triangle::from([(0.0, 0.0), (2.0, 0.0), (1.0, 2.0)]);
+        let tri2 = Triangle::from([(3.0, 0.0), (5.0, 0.0), (4.0, 2.0)]);
+        let dist = tri1.distance_ext(&tri2);
+        assert_relative_eq!(dist, 1.0);
+    }
+
+    #[test]
+    fn distance_ext_rect_test() {
+        use geo_types::Rect;
+        let rect1 = Rect::new((0.0, 0.0), (2.0, 2.0));
+        let rect2 = Rect::new((3.0, 0.0), (5.0, 2.0));
+        let dist = rect1.distance_ext(&rect2);
+        assert_relative_eq!(dist, 1.0);
+    }
+
+    #[test]
+    fn distance_ext_empty_geometry_test() {
+        let empty_ls1: LineString<f64> = LineString::new(vec![]);
+        let empty_ls2: LineString<f64> = LineString::new(vec![]);
+        let dist = empty_ls1.distance_ext(&empty_ls2);
+        assert_relative_eq!(dist, 0.0);
+    }
+
+    #[test]
+    fn distance_ext_zero_distance_test() {
+        // Test same point to itself
+        let p = Point::new(1.0, 2.0);
+        let dist = p.distance_ext(&p);
+        assert_relative_eq!(dist, 0.0);
+        
+        // Test overlapping linestrings
+        let ls = LineString::from(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]);
+        let dist = ls.distance_ext(&ls);
+        assert_relative_eq!(dist, 0.0);
+    }
+
+    #[test]
+    fn distance_ext_symmetry_test() {
+        // Test that distance is symmetric: dist(a, b) == dist(b, a)
+        let p1 = Point::new(0.0, 0.0);
+        let p2 = Point::new(3.0, 4.0);
+        let dist1 = p1.distance_ext(&p2);
+        let dist2 = p2.distance_ext(&p1);
+        assert_relative_eq!(dist1, dist2);
+        
+        let ls1 = LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]);
+        let ls2 = LineString::from(vec![(2.0, 2.0), (3.0, 3.0)]);
+        let dist3 = ls1.distance_ext(&ls2);
+        let dist4 = ls2.distance_ext(&ls1);
+        assert_relative_eq!(dist3, dist4);
+    }
+    } // End of distance_ext_tests module
+} // End of tests module
