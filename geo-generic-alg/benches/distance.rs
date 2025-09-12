@@ -145,7 +145,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             );
         });
     });
-    
+
     c.bench_function("distance_cross_type_point_to_linestring", |bencher| {
         let point = Point::new(50.0, 50.0);
         let linestring = LineString::from(vec![
