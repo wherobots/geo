@@ -655,10 +655,10 @@ where
 }
 
 // Note: Cross-type distance support is implemented via the GeometryTag delegation pattern
-// in the GenericDistanceTrait implementation above. This approach is different from the 
+// in the GenericDistanceTrait implementation above. This approach is different from the
 // original Distance trait macro pattern due to Rust's coherence rules:
 //
-// Original Distance trait: impl Distance<F, A, B> for Euclidean 
+// Original Distance trait: impl Distance<F, A, B> for Euclidean
 //   - Multiple implementations don't conflict because they're all for the same type (Euclidean)
 //   - Can use macros to generate impl Distance<F, Point, LineString> for Euclidean, etc.
 //
