@@ -120,12 +120,6 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     });
 
-    // ┌─────────────────────────────────────────────────────────────────┐
-    // │ Benchmarks for Original Distance Trait (Concrete Types)        │
-    // │ These test that the refactored implementation maintains         │
-    // │ backward compatibility and performance.                         │
-    // └─────────────────────────────────────────────────────────────────┘
-
     c.bench_function("distance_concrete_point_to_point", |bencher| {
         let p1 = Point::new(0.0, 0.0);
         let p2 = Point::new(100.0, 100.0);
@@ -151,13 +145,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             );
         });
     });
-
-    // ┌─────────────────────────────────────────────────────────────────┐
-    // │ Benchmarks for Cross-Type Distance Calculations                │
-    // │ These test the key functionality that was the reviewer's       │
-    // │ concern: different types of input geometries.                  │
-    // └─────────────────────────────────────────────────────────────────┘
-
+    
     c.bench_function("distance_cross_type_point_to_linestring", |bencher| {
         let point = Point::new(50.0, 50.0);
         let linestring = LineString::from(vec![
