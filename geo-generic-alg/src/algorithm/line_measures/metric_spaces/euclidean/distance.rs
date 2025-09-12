@@ -639,8 +639,6 @@ symmetric_distance_generic_impl!(
 // │ Cross-type DistanceExt macro implementations               │
 // └────────────────────────────────────────────────────────────┘
 
-// Unused macros removed - cross-type support is handled via GeometryTag dispatch pattern
-
 // ┌────────────────────────────────────────────────────────────┐
 // │ DistanceExt trait implementation using type-tag pattern   │
 // └────────────────────────────────────────────────────────────┘
@@ -656,8 +654,20 @@ where
     }
 }
 
-// This implementation cannot be used because it conflicts with same-type implementations
-// Cross-type distance is handled via the existing GeometryTag delegation in GenericDistanceTrait
+// Note: Cross-type distance support is implemented via the GeometryTag delegation pattern
+// in the GenericDistanceTrait implementation above. This approach is different from the 
+// original Distance trait macro pattern due to Rust's coherence rules:
+//
+// Original Distance trait: impl Distance<F, A, B> for Euclidean 
+//   - Multiple implementations don't conflict because they're all for the same type (Euclidean)
+//   - Can use macros to generate impl Distance<F, Point, LineString> for Euclidean, etc.
+//
+// DistanceExt trait: impl DistanceExt<F, B> for A
+//   - Would conflict with blanket impl DistanceExt<F> for G when A == B
+//   - Rust's orphan rule prevents having both blanket and specific implementations
+//
+// Solution: Use GeometryTraitExt runtime dispatch to handle all cross-type combinations
+// This provides the same functionality while being compatible with Rust's type system.
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Internal trait for direct distance calculations            │
@@ -1756,7 +1766,7 @@ mod tests {
             let ls1 = LineString::from(points1);
             let ls2 = LineString::from(points2);
             let dist = ls1.distance_ext(&ls2);
-            assert_relative_eq!(dist, 1.4142135623730951); // sqrt(2)
+            assert_relative_eq!(dist, std::f64::consts::SQRT_2);
         }
 
         #[test]
