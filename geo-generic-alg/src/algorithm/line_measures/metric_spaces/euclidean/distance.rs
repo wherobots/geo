@@ -392,30 +392,10 @@ use geo_traits_ext::*;
 
 /// Extension trait for generic geometry types to calculate distances directly
 /// using Euclidean metric space without conversion overhead
-pub trait DistanceExt<F: CoordFloat> {
+/// Supports both same-type and cross-type distance calculations
+pub trait DistanceExt<F: CoordFloat, Rhs = Self> {
     /// Calculate Euclidean distance using generic traits without conversion overhead
-    fn distance_ext(&self, other: &Self) -> F;
-}
-
-/// Cross-type distance extensions for Point
-#[allow(dead_code)]
-pub trait PointDistanceExt<F: CoordFloat> {
-    fn distance_ext_to_linestring<LS: LineStringTraitExt<T = F>>(&self, other: &LS) -> F;
-    fn distance_ext_to_polygon<P: PolygonTraitExt<T = F>>(&self, other: &P) -> F;
-}
-
-/// Cross-type distance extensions for LineString  
-#[allow(dead_code)]
-pub trait LineStringDistanceExt<F: CoordFloat> {
-    fn distance_ext_to_point<P: PointTraitExt<T = F>>(&self, other: &P) -> F;
-    fn distance_ext_to_polygon<Poly: PolygonTraitExt<T = F>>(&self, other: &Poly) -> F;
-}
-
-/// Cross-type distance extensions for Polygon
-#[allow(dead_code)]
-pub trait PolygonDistanceExt<F: CoordFloat> {
-    fn distance_ext_to_point<P: PointTraitExt<T = F>>(&self, other: &P) -> F;
-    fn distance_ext_to_linestring<LS: LineStringTraitExt<T = F>>(&self, other: &LS) -> F;
+    fn distance_ext(&self, other: &Rhs) -> F;
 }
 
 // ┌──────────────────────────────────────────────────────────┐
@@ -600,6 +580,35 @@ where
     }
 }
 
+// Polygon to Polygon distance (direct, no conversion)
+pub fn distance_polygon_to_polygon_generic<F, P1, P2>(polygon1: &P1, polygon2: &P2) -> F
+where
+    F: GeoFloat,
+    P1: PolygonTraitExt<T = F>,
+    P2: PolygonTraitExt<T = F>,
+{
+    if let (Some(ext1), Some(ext2)) = (polygon1.exterior_ext(), polygon2.exterior_ext()) {
+        let mut min_dist: F = Float::max_value();
+        for line1 in ext1.lines() {
+            for line2 in ext2.lines() {
+                let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
+                let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
+                let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
+                let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
+                let line_dist = d1.min(d2).min(d3).min(d4);
+                min_dist = min_dist.min(line_dist);
+            }
+        }
+        if min_dist == Float::max_value() {
+            F::zero()
+        } else {
+            min_dist
+        }
+    } else {
+        F::zero()
+    }
+}
+
 // ┌────────────────────────────────────────────────────────────┐
 // │ Generate symmetric functions using macros                  │
 // └────────────────────────────────────────────────────────────┘
@@ -627,6 +636,12 @@ symmetric_distance_generic_impl!(
 );
 
 // ┌────────────────────────────────────────────────────────────┐
+// │ Cross-type DistanceExt macro implementations               │
+// └────────────────────────────────────────────────────────────┘
+
+// Unused macros removed - cross-type support is handled via GeometryTag dispatch pattern
+
+// ┌────────────────────────────────────────────────────────────┐
 // │ DistanceExt trait implementation using type-tag pattern   │
 // └────────────────────────────────────────────────────────────┘
 
@@ -640,6 +655,9 @@ where
         self.generic_distance_trait(other)
     }
 }
+
+// This implementation cannot be used because it conflicts with same-type implementations
+// Cross-type distance is handled via the existing GeometryTag delegation in GenericDistanceTrait
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Internal trait for direct distance calculations            │
@@ -664,20 +682,6 @@ where
 {
     fn generic_distance_trait(&self, other: &Self) -> F {
         point_distance_generic(self, other)
-    }
-}
-
-// Cross-type distance implementations for Point
-impl<F, P: PointTraitExt<T = F>> PointDistanceExt<F> for P
-where
-    F: GeoFloat,
-{
-    fn distance_ext_to_linestring<LS: LineStringTraitExt<T = F>>(&self, other: &LS) -> F {
-        distance_point_to_linestring_generic(self, other)
-    }
-
-    fn distance_ext_to_polygon<Poly: PolygonTraitExt<T = F>>(&self, other: &Poly) -> F {
-        distance_point_to_polygon_generic(self, other)
     }
 }
 
@@ -711,20 +715,6 @@ where
     }
 }
 
-// Cross-type distance implementations for LineString
-impl<F, LS: LineStringTraitExt<T = F>> LineStringDistanceExt<F> for LS
-where
-    F: GeoFloat,
-{
-    fn distance_ext_to_point<P: PointTraitExt<T = F>>(&self, other: &P) -> F {
-        distance_linestring_to_point_generic(self, other)
-    }
-
-    fn distance_ext_to_polygon<Poly: PolygonTraitExt<T = F>>(&self, other: &Poly) -> F {
-        distance_linestring_to_polygon_generic(self, other)
-    }
-}
-
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Polygon (generic traits)              │
 // └────────────────────────────────────────────────────────────┘
@@ -740,20 +730,6 @@ where
         } else {
             F::zero()
         }
-    }
-}
-
-// Cross-type distance implementations for Polygon
-impl<F, P: PolygonTraitExt<T = F>> PolygonDistanceExt<F> for P
-where
-    F: GeoFloat,
-{
-    fn distance_ext_to_point<Pt: PointTraitExt<T = F>>(&self, other: &Pt) -> F {
-        distance_polygon_to_point_generic(self, other)
-    }
-
-    fn distance_ext_to_linestring<LS: LineStringTraitExt<T = F>>(&self, other: &LS) -> F {
-        distance_polygon_to_linestring_generic(self, other)
     }
 }
 
@@ -797,8 +773,23 @@ where
             (GeometryTypeExt::Polygon(poly1), GeometryTypeExt::Polygon(poly2)) => {
                 poly1.distance_ext(poly2)
             }
+            (GeometryTypeExt::MultiPoint(mp1), GeometryTypeExt::MultiPoint(mp2)) => {
+                mp1.distance_ext(mp2)
+            }
+            (GeometryTypeExt::MultiLineString(mls1), GeometryTypeExt::MultiLineString(mls2)) => {
+                mls1.distance_ext(mls2)
+            }
+            (GeometryTypeExt::MultiPolygon(mp1), GeometryTypeExt::MultiPolygon(mp2)) => {
+                mp1.distance_ext(mp2)
+            }
+            (GeometryTypeExt::Rect(rect1), GeometryTypeExt::Rect(rect2)) => {
+                rect1.distance_ext(rect2)
+            }
+            (GeometryTypeExt::Triangle(tri1), GeometryTypeExt::Triangle(tri2)) => {
+                tri1.distance_ext(tri2)
+            }
 
-            // Cross-type combinations using generic helper functions
+            // Cross-type combinations using helper functions directly
             (GeometryTypeExt::Point(point), GeometryTypeExt::LineString(linestring)) => {
                 distance_point_to_linestring_generic(point, linestring)
             }
@@ -818,26 +809,7 @@ where
                 distance_polygon_to_linestring_generic(polygon, linestring)
             }
 
-            // Multi-geometry combinations
-            (GeometryTypeExt::MultiPoint(mp1), GeometryTypeExt::MultiPoint(mp2)) => {
-                mp1.distance_ext(mp2)
-            }
-            (GeometryTypeExt::MultiLineString(mls1), GeometryTypeExt::MultiLineString(mls2)) => {
-                mls1.distance_ext(mls2)
-            }
-            (GeometryTypeExt::MultiPolygon(mp1), GeometryTypeExt::MultiPolygon(mp2)) => {
-                mp1.distance_ext(mp2)
-            }
-
-            // Rect and Triangle combinations
-            (GeometryTypeExt::Rect(rect1), GeometryTypeExt::Rect(rect2)) => {
-                rect1.distance_ext(rect2)
-            }
-            (GeometryTypeExt::Triangle(tri1), GeometryTypeExt::Triangle(tri2)) => {
-                tri1.distance_ext(tri2)
-            }
-
-            // Cross-type combinations with Rect
+            // Cross-type combinations with Rect (convert to polygon)
             (GeometryTypeExt::Point(point), GeometryTypeExt::Rect(rect)) => {
                 let poly = rect.to_polygon();
                 distance_point_to_polygon_generic(point, &poly)
@@ -846,8 +818,24 @@ where
                 let poly = rect.to_polygon();
                 distance_polygon_to_point_generic(&poly, point)
             }
+            (GeometryTypeExt::LineString(linestring), GeometryTypeExt::Rect(rect)) => {
+                let poly = rect.to_polygon();
+                distance_linestring_to_polygon_generic(linestring, &poly)
+            }
+            (GeometryTypeExt::Rect(rect), GeometryTypeExt::LineString(linestring)) => {
+                let poly = rect.to_polygon();
+                distance_polygon_to_linestring_generic(&poly, linestring)
+            }
+            (GeometryTypeExt::Polygon(polygon), GeometryTypeExt::Rect(rect)) => {
+                let poly = rect.to_polygon();
+                distance_polygon_to_polygon_generic(polygon, &poly)
+            }
+            (GeometryTypeExt::Rect(rect), GeometryTypeExt::Polygon(polygon)) => {
+                let poly = rect.to_polygon();
+                distance_polygon_to_polygon_generic(&poly, polygon)
+            }
 
-            // Cross-type combinations with Triangle
+            // Cross-type combinations with Triangle (convert to polygon)
             (GeometryTypeExt::Point(point), GeometryTypeExt::Triangle(tri)) => {
                 let poly = tri.to_polygon();
                 distance_point_to_polygon_generic(point, &poly)
@@ -856,6 +844,140 @@ where
                 let poly = tri.to_polygon();
                 distance_polygon_to_point_generic(&poly, point)
             }
+            (GeometryTypeExt::LineString(linestring), GeometryTypeExt::Triangle(tri)) => {
+                let poly = tri.to_polygon();
+                distance_linestring_to_polygon_generic(linestring, &poly)
+            }
+            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::LineString(linestring)) => {
+                let poly = tri.to_polygon();
+                distance_polygon_to_linestring_generic(&poly, linestring)
+            }
+            (GeometryTypeExt::Polygon(polygon), GeometryTypeExt::Triangle(tri)) => {
+                let poly = tri.to_polygon();
+                distance_polygon_to_polygon_generic(polygon, &poly)
+            }
+            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Polygon(polygon)) => {
+                let poly = tri.to_polygon();
+                distance_polygon_to_polygon_generic(&poly, polygon)
+            }
+            (GeometryTypeExt::Rect(rect), GeometryTypeExt::Triangle(tri)) => {
+                let rect_poly = rect.to_polygon();
+                let tri_poly = tri.to_polygon();
+                distance_polygon_to_polygon_generic(&rect_poly, &tri_poly)
+            }
+            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Rect(rect)) => {
+                let tri_poly = tri.to_polygon();
+                let rect_poly = rect.to_polygon();
+                distance_polygon_to_polygon_generic(&tri_poly, &rect_poly)
+            }
+
+            // Multi-geometry cross-type combinations using fold operations
+            (GeometryTypeExt::Point(point), GeometryTypeExt::MultiPoint(mp)) => mp
+                .points_ext()
+                .map(|p| point_distance_generic(point, &p))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::MultiPoint(mp), GeometryTypeExt::Point(point)) => mp
+                .points_ext()
+                .map(|p| point_distance_generic(&p, point))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::Point(point), GeometryTypeExt::MultiLineString(mls)) => mls
+                .line_strings_ext()
+                .map(|ls| distance_point_to_linestring_generic(point, &ls))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::MultiLineString(mls), GeometryTypeExt::Point(point)) => mls
+                .line_strings_ext()
+                .map(|ls| distance_linestring_to_point_generic(&ls, point))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::Point(point), GeometryTypeExt::MultiPolygon(mp)) => mp
+                .polygons_ext()
+                .map(|p| distance_point_to_polygon_generic(point, &p))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::MultiPolygon(mp), GeometryTypeExt::Point(point)) => mp
+                .polygons_ext()
+                .map(|p| distance_polygon_to_point_generic(&p, point))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+
+            // LineString to multi-geometry combinations
+            (GeometryTypeExt::LineString(ls), GeometryTypeExt::MultiPoint(mp)) => mp
+                .points_ext()
+                .map(|p| distance_linestring_to_point_generic(ls, &p))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::MultiPoint(mp), GeometryTypeExt::LineString(ls)) => mp
+                .points_ext()
+                .map(|p| distance_point_to_linestring_generic(&p, ls))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::LineString(ls), GeometryTypeExt::MultiLineString(mls)) => {
+                let mut min_dist: F = Float::max_value();
+                for other_ls in mls.line_strings_ext() {
+                    for line1 in ls.lines() {
+                        for line2 in other_ls.lines() {
+                            let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
+                            let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
+                            let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
+                            let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
+                            min_dist = min_dist.min(d1.min(d2).min(d3).min(d4));
+                        }
+                    }
+                }
+                if min_dist == Float::max_value() {
+                    F::zero()
+                } else {
+                    min_dist
+                }
+            }
+            (GeometryTypeExt::MultiLineString(mls), GeometryTypeExt::LineString(ls)) => {
+                let mut min_dist: F = Float::max_value();
+                for other_ls in mls.line_strings_ext() {
+                    for line1 in other_ls.lines() {
+                        for line2 in ls.lines() {
+                            let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
+                            let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
+                            let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
+                            let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
+                            min_dist = min_dist.min(d1.min(d2).min(d3).min(d4));
+                        }
+                    }
+                }
+                if min_dist == Float::max_value() {
+                    F::zero()
+                } else {
+                    min_dist
+                }
+            }
+            (GeometryTypeExt::LineString(ls), GeometryTypeExt::MultiPolygon(mp)) => mp
+                .polygons_ext()
+                .map(|p| distance_linestring_to_polygon_generic(ls, &p))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::MultiPolygon(mp), GeometryTypeExt::LineString(ls)) => mp
+                .polygons_ext()
+                .map(|p| distance_polygon_to_linestring_generic(&p, ls))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+
+            // Polygon to multi-geometry combinations
+            (GeometryTypeExt::Polygon(poly), GeometryTypeExt::MultiPoint(mp)) => mp
+                .points_ext()
+                .map(|p| distance_polygon_to_point_generic(poly, &p))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::MultiPoint(mp), GeometryTypeExt::Polygon(poly)) => mp
+                .points_ext()
+                .map(|p| distance_point_to_polygon_generic(&p, poly))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::Polygon(poly), GeometryTypeExt::MultiLineString(mls)) => mls
+                .line_strings_ext()
+                .map(|ls| distance_polygon_to_linestring_generic(poly, &ls))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::MultiLineString(mls), GeometryTypeExt::Polygon(poly)) => mls
+                .line_strings_ext()
+                .map(|ls| distance_linestring_to_polygon_generic(&ls, poly))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::Polygon(poly), GeometryTypeExt::MultiPolygon(mp)) => mp
+                .polygons_ext()
+                .map(|p| distance_polygon_to_polygon_generic(poly, &p))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
+            (GeometryTypeExt::MultiPolygon(mp), GeometryTypeExt::Polygon(poly)) => mp
+                .polygons_ext()
+                .map(|p| distance_polygon_to_polygon_generic(&p, poly))
+                .fold(Float::max_value(), |acc, dist| acc.min(dist)),
 
             // For unsupported combinations, return zero
             _ => F::zero(),
@@ -1479,6 +1601,22 @@ mod tests {
             assert_eq!(Euclidean.distance(&p2, &p3), 50.0f64);
         }
         #[test]
+        fn rect_to_polygon_distance_test() {
+            // Test that Rect to Polygon distance works
+            let rect = Rect::new((0.0, 0.0), (2.0, 2.0));
+            let poly_points = vec![(3., 0.), (5., 0.), (5., 2.), (3., 2.), (3., 0.)];
+            let poly = Polygon::new(LineString::from(poly_points), vec![]);
+
+            // Test both directions
+            let dist1 = Euclidean.distance(&rect, &poly);
+            let dist2 = Euclidean.distance(&poly, &rect);
+
+            assert_relative_eq!(dist1, 1.0);
+            assert_relative_eq!(dist2, 1.0);
+            assert_relative_eq!(dist1, dist2); // Verify symmetry
+        }
+
+        #[test]
         fn all_types_geometry_collection_test() {
             let p = Point::new(0.0, 0.0);
             let line = Line::from([(-1.0, -1.0), (-2.0, -2.0)]);
@@ -1767,7 +1905,6 @@ mod tests {
 
         #[test]
         fn distance_ext_point_to_linestring_test() {
-            use super::PointDistanceExt;
             // Like an octagon, but missing the lowest horizontal segment
             let points = vec![
                 (5., 1.),
@@ -1782,13 +1919,12 @@ mod tests {
             let ls = LineString::from(points);
             // A Random point "inside" the LineString
             let p = Point::new(5.5, 2.1);
-            let dist = p.distance_ext_to_linestring(&ls);
+            let dist = distance_point_to_linestring_generic(&p, &ls);
             assert_relative_eq!(dist, 1.1313708498984762);
         }
 
         #[test]
         fn distance_ext_point_to_polygon_test() {
-            use super::PointDistanceExt;
             // An octagon
             let points = vec![
                 (5., 1.),
@@ -1805,69 +1941,80 @@ mod tests {
             let poly = Polygon::new(ls, vec![]);
             // A Random point outside the octagon
             let p = Point::new(2.5, 0.5);
-            let dist = p.distance_ext_to_polygon(&poly);
+            let dist = distance_point_to_polygon_generic(&p, &poly);
             assert_relative_eq!(dist, 2.1213203435596424);
         }
 
         #[test]
         fn distance_ext_linestring_to_point_test() {
-            use super::LineStringDistanceExt;
             let ls = LineString::from(vec![(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)]);
             let p = Point::new(3.0, 1.0);
-            let dist = ls.distance_ext_to_point(&p);
+            let dist = distance_linestring_to_point_generic(&ls, &p);
             assert_relative_eq!(dist, 1.0);
         }
 
         #[test]
         fn distance_ext_linestring_to_polygon_test() {
-            use super::LineStringDistanceExt;
             let ls = LineString::from(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]);
             let poly_points = vec![(3., 0.), (5., 0.), (5., 2.), (3., 2.), (3., 0.)];
             let poly = Polygon::new(LineString::from(poly_points), vec![]);
-            let dist = ls.distance_ext_to_polygon(&poly);
+            let dist = distance_linestring_to_polygon_generic(&ls, &poly);
             assert_relative_eq!(dist, 1.0);
         }
 
         #[test]
         fn distance_ext_polygon_to_point_test() {
-            use super::PolygonDistanceExt;
             let poly_points = vec![(0., 0.), (2., 0.), (2., 2.), (0., 2.), (0., 0.)];
             let poly = Polygon::new(LineString::from(poly_points), vec![]);
             let p = Point::new(3.0, 1.0);
-            let dist = poly.distance_ext_to_point(&p);
+            let dist = distance_polygon_to_point_generic(&poly, &p);
             assert_relative_eq!(dist, 1.0);
         }
 
         #[test]
         fn distance_ext_polygon_to_linestring_test() {
-            use super::PolygonDistanceExt;
             let poly_points = vec![(0., 0.), (2., 0.), (2., 2.), (0., 2.), (0., 0.)];
             let poly = Polygon::new(LineString::from(poly_points), vec![]);
             let ls = LineString::from(vec![(3.0, 0.0), (4.0, 1.0), (5.0, 0.0)]);
-            let dist = poly.distance_ext_to_linestring(&ls);
+            let dist = distance_polygon_to_linestring_generic(&poly, &ls);
             assert_relative_eq!(dist, 1.0);
         }
 
         #[test]
         fn distance_ext_cross_type_symmetry_test() {
-            use super::{LineStringDistanceExt, PointDistanceExt};
-            // Test that cross-type distance is symmetric: point.distance_to_linestring(ls) == ls.distance_to_point(point)
+            // Test that cross-type distance is symmetric via helper functions
             let p = Point::new(3.0, 4.0);
             let ls = LineString::from(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]);
 
-            let dist1 = p.distance_ext_to_linestring(&ls);
-            let dist2 = ls.distance_ext_to_point(&p);
+            let dist1 = distance_point_to_linestring_generic(&p, &ls);
+            let dist2 = distance_linestring_to_point_generic(&ls, &p);
             assert_relative_eq!(dist1, dist2);
         }
 
         #[test]
+        fn distance_ext_rect_to_polygon_test() {
+            // Test that Rect to Polygon cross-type distance is now supported via helper functions
+            use geo_types::Rect;
+            let rect = Rect::new((0.0, 0.0), (2.0, 2.0));
+            let poly_points = vec![(3., 0.), (5., 0.), (5., 2.), (3., 2.), (3., 0.)];
+            let poly = Polygon::new(LineString::from(poly_points), vec![]);
+
+            // Test cross-type distance via conversion and helper functions
+            let rect_poly = rect.to_polygon();
+            let dist1 = distance_polygon_to_polygon_generic(&rect_poly, &poly);
+            let dist2 = distance_polygon_to_polygon_generic(&poly, &rect_poly);
+            assert_relative_eq!(dist1, 1.0);
+            assert_relative_eq!(dist2, 1.0);
+            assert_relative_eq!(dist1, dist2); // Verify symmetry
+        }
+
+        #[test]
         fn distance_ext_boundary_cases_test() {
-            use super::PointDistanceExt;
             // Test point on polygon boundary
             let poly_points = vec![(0., 0.), (2., 0.), (2., 2.), (0., 2.), (0., 0.)];
             let poly = Polygon::new(LineString::from(poly_points), vec![]);
             let p_on_boundary = Point::new(0.0, 1.0); // On left edge
-            let dist = p_on_boundary.distance_ext_to_polygon(&poly);
+            let dist = distance_point_to_polygon_generic(&p_on_boundary, &poly);
             assert_relative_eq!(dist, 0.0);
         }
     } // End of distance_ext_tests module
