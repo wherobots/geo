@@ -6,11 +6,13 @@ use crate::algorithm::Intersects;
 use crate::coordinate_position::{coord_pos_relative_to_ring, CoordPos};
 use crate::geometry::*;
 use crate::{CoordFloat, GeoFloat, GeoNum};
+use geo_traits::CoordTrait;
+use geo_traits_ext::{
+    LineStringTraitExt, LineTraitExt, PointTraitExt, PolygonTraitExt, TriangleTraitExt,
+};
 use num_traits::{Bounded, Float};
 use rstar::primitives::CachedEnvelope;
 use rstar::RTree;
-use geo_traits::CoordTrait;
-use geo_traits_ext::{LineTraitExt, PointTraitExt, LineStringTraitExt, PolygonTraitExt, TriangleTraitExt};
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Helper functions for generic distance calculations         │
@@ -333,6 +335,7 @@ where
 }
 
 /// LineString to LineString distance
+#[allow(dead_code)] // Used in test code
 pub fn distance_linestring_to_linestring_generic<F, LS1, LS2>(ls1: &LS1, ls2: &LS2) -> F
 where
     F: GeoFloat,
