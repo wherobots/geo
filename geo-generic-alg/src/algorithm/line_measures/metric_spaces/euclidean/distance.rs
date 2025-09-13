@@ -447,10 +447,11 @@ macro_rules! impl_distance_ext_for_iter_geometry_trait {
 }
 
 // ┌──────────────────────────────────────────────────────────┐
-// │ Helper functions for generic trait operations              │
+// │ Helper functions for generic trait operations            │
 // └──────────────────────────────────────────────────────────┘
 
 // Helper function for point distance using generic trait methods
+// Similar to distance between coords, but using generic traits
 fn point_distance_generic<F, P1, P2>(p1: &P1, p2: &P2) -> F
 where
     F: CoordFloat,
@@ -467,6 +468,7 @@ where
 }
 
 // Helper for line segment distance using generic trait methods
+// Similar to geo_types::private_utils::line_segment_distance but using generic traits
 fn line_segment_distance_generic<F, C, L>(coord: &C, line: &L) -> F
 where
     F: CoordFloat,
@@ -519,7 +521,8 @@ macro_rules! symmetric_distance_generic_impl {
 // │ Cross-type distance functions (direct, no conversion)      │
 // └────────────────────────────────────────────────────────────┘
 
-// Point to LineString distance (direct, no conversion)
+// Point to LineString distance using generic trait methods
+// Similar to geo_types::private_utils::point_line_string_euclidean_distance but using generic traits
 pub fn distance_point_to_linestring_generic<F, P, LS>(point: &P, linestring: &LS) -> F
 where
     F: CoordFloat,
@@ -543,7 +546,8 @@ where
     }
 }
 
-// Point to Polygon distance (direct, no conversion)
+// Point to Polygon distance using generic trait methods
+// Similar to the original algorithm but using generic traits
 pub fn distance_point_to_polygon_generic<F, P, Poly>(point: &P, polygon: &Poly) -> F
 where
     F: GeoFloat,
@@ -586,7 +590,7 @@ where
     }
 }
 
-// LineString to Polygon distance (direct, no conversion)
+// LineString to Polygon distance using generic trait methods
 pub fn distance_linestring_to_polygon_generic<F, LS, Poly>(linestring: &LS, polygon: &Poly) -> F
 where
     F: GeoFloat,
@@ -639,9 +643,13 @@ where
     P1: PolygonTraitExt<T = F>,
     P2: PolygonTraitExt<T = F>,
 {
+    // Check if polygons intersect using generic intersects
+    if polygon1.intersects(polygon2) {
+        return F::zero();
+    }
+
     if let (Some(ext1), Some(ext2)) = (polygon1.exterior_ext(), polygon2.exterior_ext()) {
-        // Convert to concrete Polygon types for intersection and containment checks
-        // This is necessary because Intersects trait is implemented for concrete types
+        // For containment checks, we still need concrete polygons since ring_contains_coord requires concrete types
         let ext1_coords: Vec<Coord<F>> = ext1
             .coords_ext()
             .map(|c| Coord::from((c.x(), c.y())))
@@ -674,11 +682,6 @@ where
 
         let poly_a: Polygon<F> = Polygon::new(LineString::from(ext1_coords), interior1_coords);
         let poly_b: Polygon<F> = Polygon::new(LineString::from(ext2_coords), interior2_coords);
-
-        // Check if polygons intersect
-        if poly_a.intersects(&poly_b) {
-            return F::zero();
-        }
 
         // Containment check - if polygon_b is inside polygon_a's hole
         if !poly_a.interiors().is_empty() {
@@ -796,8 +799,8 @@ where
     let start2 = line2.start_coord();
     let end2 = line2.end_coord();
 
-    // Check if lines intersect
-    if lines_intersect(&start1, &end1, &start2, &end2) {
+    // Check if lines intersect using generic intersects
+    if line1.intersects(line2) {
         return F::zero();
     }
 
@@ -810,56 +813,6 @@ where
     dist1.min(dist2).min(dist3).min(dist4)
 }
 
-// Helper function to check if two line segments intersect
-fn lines_intersect<F>(p1: &Coord<F>, q1: &Coord<F>, p2: &Coord<F>, q2: &Coord<F>) -> bool
-where
-    F: GeoFloat,
-{
-    fn orientation<F: GeoFloat>(p: &Coord<F>, q: &Coord<F>, r: &Coord<F>) -> i8 {
-        let val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
-        if val == F::zero() {
-            0
-        }
-        // collinear
-        else if val > F::zero() {
-            1
-        }
-        // clockwise
-        else {
-            2
-        } // counterclockwise
-    }
-
-    fn on_segment<F: GeoFloat>(p: &Coord<F>, q: &Coord<F>, r: &Coord<F>) -> bool {
-        q.x <= p.x.max(r.x) && q.x >= p.x.min(r.x) && q.y <= p.y.max(r.y) && q.y >= p.y.min(r.y)
-    }
-
-    let o1 = orientation(p1, q1, p2);
-    let o2 = orientation(p1, q1, q2);
-    let o3 = orientation(p2, q2, p1);
-    let o4 = orientation(p2, q2, q1);
-
-    // General case
-    if o1 != o2 && o3 != o4 {
-        return true;
-    }
-
-    // Special cases
-    if o1 == 0 && on_segment(p1, p2, q1) {
-        return true;
-    }
-    if o2 == 0 && on_segment(p1, q2, q1) {
-        return true;
-    }
-    if o3 == 0 && on_segment(p2, p1, q2) {
-        return true;
-    }
-    if o4 == 0 && on_segment(p2, q1, q2) {
-        return true;
-    }
-
-    false
-}
 
 // Line to Polygon distance
 pub fn distance_line_to_polygon_generic<F, L, Poly>(line: &L, polygon: &Poly) -> F
