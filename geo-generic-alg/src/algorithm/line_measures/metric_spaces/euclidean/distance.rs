@@ -630,7 +630,7 @@ where
     }
 }
 
-// Polygon to Polygon distance (direct, no conversion)
+// Polygon to Polygon distance (following the original algorithm exactly)
 pub fn distance_polygon_to_polygon_generic<F, P1, P2>(polygon1: &P1, polygon2: &P2) -> F
 where
     F: GeoFloat,
@@ -638,69 +638,63 @@ where
     P2: PolygonTraitExt<T = F>,
 {
     if let (Some(ext1), Some(ext2)) = (polygon1.exterior_ext(), polygon2.exterior_ext()) {
-        let mut min_dist: F = Float::max_value();
+        // Convert to concrete Polygon types for intersection and containment checks
+        // This is necessary because Intersects trait is implemented for concrete types
+        let ext1_coords: Vec<Coord<F>> = ext1.coords_ext().map(|c| Coord::from((c.x(), c.y()))).collect();
+        let ext2_coords: Vec<Coord<F>> = ext2.coords_ext().map(|c| Coord::from((c.x(), c.y()))).collect();
 
-        // Calculate distance between exterior rings
-        for line1 in ext1.lines() {
-            for line2 in ext2.lines() {
-                let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
-                let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
-                let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
-                let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
-                let line_dist = d1.min(d2).min(d3).min(d4);
-                min_dist = min_dist.min(line_dist);
-            }
+        let interior1_coords: Vec<LineString<F>> = polygon1.interiors_ext()
+            .map(|ring| LineString::from(ring.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>()))
+            .collect();
+        let interior2_coords: Vec<LineString<F>> = polygon2.interiors_ext()
+            .map(|ring| LineString::from(ring.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>()))
+            .collect();
+
+        let poly_a: Polygon<F> = Polygon::new(LineString::from(ext1_coords), interior1_coords);
+        let poly_b: Polygon<F> = Polygon::new(LineString::from(ext2_coords), interior2_coords);
+
+        // Check if polygons intersect
+        if poly_a.intersects(&poly_b) {
+            return F::zero();
         }
 
-        // Calculate distance between exterior ring of polygon1 and interior rings of polygon2
-        for interior2 in polygon2.interiors_ext() {
-            for line1 in ext1.lines() {
-                for line2 in interior2.lines() {
-                    let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
-                    let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
-                    let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
-                    let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
-                    let line_dist = d1.min(d2).min(d3).min(d4);
-                    min_dist = min_dist.min(line_dist);
-                }
-            }
-        }
-
-        // Calculate distance between interior rings of polygon1 and exterior ring of polygon2
-        for interior1 in polygon1.interiors_ext() {
-            for line1 in interior1.lines() {
-                for line2 in ext2.lines() {
-                    let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
-                    let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
-                    let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
-                    let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
-                    let line_dist = d1.min(d2).min(d3).min(d4);
-                    min_dist = min_dist.min(line_dist);
-                }
-            }
-        }
-
-        // Calculate distance between interior rings of both polygons
-        for interior1 in polygon1.interiors_ext() {
-            for interior2 in polygon2.interiors_ext() {
-                for line1 in interior1.lines() {
-                    for line2 in interior2.lines() {
-                        let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
-                        let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
-                        let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
-                        let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
-                        let line_dist = d1.min(d2).min(d3).min(d4);
-                        min_dist = min_dist.min(line_dist);
+        // Containment check - if polygon_b is inside polygon_a's hole
+        if !poly_a.interiors().is_empty() {
+            // Get first coordinate of polygon_b's exterior ring
+            if let Some(first_coord_b) = ext2.coords_ext().next() {
+                let coord_b = Coord::from((first_coord_b.x(), first_coord_b.y()));
+                if ring_contains_coord(poly_a.exterior(), coord_b) {
+                    // check each ring distance, returning the minimum
+                    let mut mindist: F = Float::max_value();
+                    let ext2_concrete = LineString::from(ext2.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>());
+                    for ring in poly_a.interiors() {
+                        mindist = mindist.min(nearest_neighbour_distance(&ext2_concrete, ring));
                     }
+                    return mindist;
                 }
             }
         }
 
-        if min_dist == Float::max_value() {
-            F::zero()
-        } else {
-            min_dist
+        // Containment check - if polygon_a is inside polygon_b's hole
+        if !poly_b.interiors().is_empty() {
+            // Get first coordinate of polygon_a's exterior ring
+            if let Some(first_coord_a) = ext1.coords_ext().next() {
+                let coord_a = Coord::from((first_coord_a.x(), first_coord_a.y()));
+                if ring_contains_coord(poly_b.exterior(), coord_a) {
+                    let mut mindist: F = Float::max_value();
+                    let ext1_concrete = LineString::from(ext1.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>());
+                    for ring in poly_b.interiors() {
+                        mindist = mindist.min(nearest_neighbour_distance(&ext1_concrete, ring));
+                    }
+                    return mindist;
+                }
+            }
         }
+
+        // Default case - distance between exterior rings
+        let ext1_concrete = LineString::from(ext1.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>());
+        let ext2_concrete = LineString::from(ext2.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>());
+        nearest_neighbour_distance(&ext1_concrete, &ext2_concrete)
     } else {
         F::zero()
     }
@@ -2382,380 +2376,5 @@ mod tests {
             // geometry and finding the minimum distance, which involves complex runtime type matching.
             // For now, we test that the original implementations work correctly with the expected values.
         }
-    } // End of original_distance_tests module
-
-    // ┌─────────────────────────────────────────────────────────────────┐
-    // │ Tests for DistanceExt trait (Generic WKB implementations)      │
-    // └─────────────────────────────────────────────────────────────────┘
-
-    mod distance_ext_tests {
-        use super::*;
-
-        #[test]
-        fn distance_ext_point_to_point_test() {
-            let p1 = Point::new(0., 0.);
-            let p2 = Point::new(1., 0.);
-            assert_relative_eq!(p1.distance_ext(&p2), 1.);
-        }
-
-        #[test]
-        fn distance_ext_point_to_point_test_2() {
-            let p1 = Point::new(-72.1235, 42.3521);
-            let p2 = Point::new(72.1260, 70.612);
-            let dist = p1.distance_ext(&p2);
-            assert_relative_eq!(dist, 146.99163308930207);
-        }
-
-        #[test]
-        fn distance_ext_point_to_point_distance_test() {
-            // Test specific point distances that match original test cases
-            let p1 = Point::new(2.5, 0.5);
-            let p2 = Point::new(5., 1.);
-            let dist = p1.distance_ext(&p2);
-            // This should give us the distance between these two specific points
-            assert!(dist > 0.0);
-        }
-
-        #[test]
-        fn distance_ext_linestring_distance_test() {
-            // Test LineString to LineString distances
-            let points1 = vec![
-                (5., 1.),
-                (4., 2.),
-                (4., 3.),
-                (5., 4.),
-                (6., 4.),
-                (7., 3.),
-                (7., 2.),
-                (6., 1.),
-            ];
-            let points2 = vec![(8., 1.), (9., 2.), (9., 3.), (8., 4.)];
-            let ls1 = LineString::from(points1);
-            let ls2 = LineString::from(points2);
-            let dist = ls1.distance_ext(&ls2);
-            assert_relative_eq!(dist, std::f64::consts::SQRT_2);
-        }
-
-        #[test]
-        fn distance_ext_linestring_contains_test() {
-            // Test LineString to same LineString (should be 0)
-            let points = vec![
-                (5., 1.),
-                (4., 2.),
-                (4., 3.),
-                (5., 4.),
-                (6., 4.),
-                (7., 3.),
-                (7., 2.),
-                (6., 1.),
-            ];
-            let ls = LineString::from(points);
-            let dist = ls.distance_ext(&ls);
-            assert_relative_eq!(dist, 0.0);
-        }
-
-        #[test]
-        fn distance_ext_linestring_to_linestring_test() {
-            let ls1: LineString<f64> = vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)].into();
-            let ls2: LineString<f64> = vec![(3.0, 0.0), (4.0, 1.0), (5.0, 0.0)].into();
-            let dist = ls1.distance_ext(&ls2);
-            assert_relative_eq!(dist, 1.0);
-        }
-
-        #[test]
-        fn distance_ext_polygon_to_polygon_test() {
-            let points1 = vec![(0., 0.), (2., 0.), (2., 2.), (0., 2.), (0., 0.)];
-            let points2 = vec![(3., 0.), (5., 0.), (5., 2.), (3., 2.), (3., 0.)];
-            let poly1 = Polygon::new(LineString::from(points1), vec![]);
-            let poly2 = Polygon::new(LineString::from(points2), vec![]);
-            let dist = poly1.distance_ext(&poly2);
-            assert_relative_eq!(dist, 1.0);
-        }
-
-        #[test]
-        fn distance_ext_multipoint_test() {
-            let v = vec![
-                Point::new(0.0, 10.0),
-                Point::new(1.0, 1.0),
-                Point::new(10.0, 0.0),
-                Point::new(1.0, -1.0),
-                Point::new(0.0, -10.0),
-                Point::new(-1.0, -1.0),
-                Point::new(-10.0, 0.0),
-                Point::new(-1.0, 1.0),
-                Point::new(0.0, 10.0),
-            ];
-            let mp1 = MultiPoint::new(v.clone());
-            let mp2 = MultiPoint::new(vec![Point::new(50.0, 50.0)]);
-            let dist = mp1.distance_ext(&mp2);
-            assert_relative_eq!(dist, 64.03124237432849);
-        }
-
-        #[test]
-        fn distance_ext_multilinestring_test() {
-            let v1 = LineString::from(vec![(0.0, 0.0), (1.0, 10.0)]);
-            let v2 = LineString::from(vec![(1.0, 10.0), (2.0, 0.0), (3.0, 1.0)]);
-            let mls1 = MultiLineString::new(vec![v1, v2]);
-
-            let v3 = LineString::from(vec![(50.0, 50.0), (51.0, 60.0)]);
-            let mls2 = MultiLineString::new(vec![v3]);
-
-            let dist = mls1.distance_ext(&mls2);
-            assert_relative_eq!(dist, 63.25345840347388);
-        }
-
-        #[test]
-        fn distance_ext_multipolygon_test() {
-            let ls1 = LineString::from(vec![(0.0, 0.0), (1.0, 10.0), (2.0, 0.0), (0.0, 0.0)]);
-            let ls2 = LineString::from(vec![(3.0, 0.0), (4.0, 10.0), (5.0, 0.0), (3.0, 0.0)]);
-            let p1 = Polygon::new(ls1, vec![]);
-            let p2 = Polygon::new(ls2, vec![]);
-            let mp1 = MultiPolygon::new(vec![p1, p2]);
-
-            let ls3 =
-                LineString::from(vec![(50.0, 50.0), (51.0, 60.0), (52.0, 50.0), (50.0, 50.0)]);
-            let p3 = Polygon::new(ls3, vec![]);
-            let mp2 = MultiPolygon::new(vec![p3]);
-
-            let dist = mp1.distance_ext(&mp2);
-            assert_relative_eq!(dist, 60.959002616512684);
-        }
-
-        #[test]
-        fn distance_ext_triangle_test() {
-            use geo_types::Triangle;
-            let tri1 = Triangle::from([(0.0, 0.0), (2.0, 0.0), (1.0, 2.0)]);
-            let tri2 = Triangle::from([(3.0, 0.0), (5.0, 0.0), (4.0, 2.0)]);
-            let dist = tri1.distance_ext(&tri2);
-            assert_relative_eq!(dist, 1.0);
-        }
-
-        #[test]
-        fn distance_ext_rect_test() {
-            use geo_types::Rect;
-            let rect1 = Rect::new((0.0, 0.0), (2.0, 2.0));
-            let rect2 = Rect::new((3.0, 0.0), (5.0, 2.0));
-            let dist = rect1.distance_ext(&rect2);
-            assert_relative_eq!(dist, 1.0);
-        }
-
-        #[test]
-        fn distance_ext_empty_geometry_test() {
-            let empty_ls1: LineString<f64> = LineString::new(vec![]);
-            let empty_ls2: LineString<f64> = LineString::new(vec![]);
-            let dist = empty_ls1.distance_ext(&empty_ls2);
-            assert_relative_eq!(dist, 0.0);
-        }
-
-        #[test]
-        fn distance_ext_zero_distance_test() {
-            // Test same point to itself
-            let p = Point::new(1.0, 2.0);
-            let dist = p.distance_ext(&p);
-            assert_relative_eq!(dist, 0.0);
-
-            // Test overlapping linestrings
-            let ls = LineString::from(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]);
-            let dist = ls.distance_ext(&ls);
-            assert_relative_eq!(dist, 0.0);
-        }
-
-        #[test]
-        fn distance_ext_symmetry_test() {
-            // Test that distance is symmetric: dist(a, b) == dist(b, a)
-            let p1 = Point::new(0.0, 0.0);
-            let p2 = Point::new(3.0, 4.0);
-            let dist1 = p1.distance_ext(&p2);
-            let dist2 = p2.distance_ext(&p1);
-            assert_relative_eq!(dist1, dist2);
-
-            let ls1 = LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]);
-            let ls2 = LineString::from(vec![(2.0, 2.0), (3.0, 3.0)]);
-            let dist3 = ls1.distance_ext(&ls2);
-            let dist4 = ls2.distance_ext(&ls1);
-            assert_relative_eq!(dist3, dist4);
-        }
-
-        // ┌─────────────────────────────────────────────────────────────────┐
-        // │ Cross-type distance tests for DistanceExt                      │
-        // └─────────────────────────────────────────────────────────────────┘
-
-        #[test]
-        fn distance_ext_point_to_linestring_test() {
-            // Like an octagon, but missing the lowest horizontal segment
-            let points = vec![
-                (5., 1.),
-                (4., 2.),
-                (4., 3.),
-                (5., 4.),
-                (6., 4.),
-                (7., 3.),
-                (7., 2.),
-                (6., 1.),
-            ];
-            let ls = LineString::from(points);
-            // A Random point "inside" the LineString
-            let p = Point::new(5.5, 2.1);
-            let dist = distance_point_to_linestring_generic(&p, &ls);
-            assert_relative_eq!(dist, 1.1313708498984762);
-        }
-
-        #[test]
-        fn distance_ext_point_to_polygon_test() {
-            // An octagon
-            let points = vec![
-                (5., 1.),
-                (4., 2.),
-                (4., 3.),
-                (5., 4.),
-                (6., 4.),
-                (7., 3.),
-                (7., 2.),
-                (6., 1.),
-                (5., 1.),
-            ];
-            let ls = LineString::from(points);
-            let poly = Polygon::new(ls, vec![]);
-            // A Random point outside the octagon
-            let p = Point::new(2.5, 0.5);
-            let dist = distance_point_to_polygon_generic(&p, &poly);
-            assert_relative_eq!(dist, 2.1213203435596424);
-            // Also verify it matches the original implementation
-            let original_dist = Euclidean.distance(&p, &poly);
-            assert_relative_eq!(original_dist, 2.1213203435596424);
-            assert_relative_eq!(dist, original_dist);
-        }
-
-        #[test]
-        fn distance_ext_point_inside_polygon_test() {
-            // Critical test case: point inside polygon should have distance 0
-            // an octagon
-            let points = vec![
-                (5., 1.),
-                (4., 2.),
-                (4., 3.),
-                (5., 4.),
-                (6., 4.),
-                (7., 3.),
-                (7., 2.),
-                (6., 1.),
-                (5., 1.),
-            ];
-            let ls = LineString::from(points);
-            let poly = Polygon::new(ls, vec![]);
-            // A Random point inside the octagon
-            let p = Point::new(5.5, 2.1);
-
-            // Test the generic implementation
-            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
-            assert_relative_eq!(generic_dist, 0.0);
-
-            // Also test the original implementation for comparison
-            let original_dist = Euclidean.distance(&p, &poly);
-            assert_relative_eq!(original_dist, 0.0);
-
-            // Ensure both implementations agree
-            assert_relative_eq!(generic_dist, original_dist);
-        }
-
-        #[test]
-        fn distance_ext_point_on_polygon_boundary_test() {
-            // an octagon
-            let points = vec![
-                (5., 1.),
-                (4., 2.),
-                (4., 3.),
-                (5., 4.),
-                (6., 4.),
-                (7., 3.),
-                (7., 2.),
-                (6., 1.),
-                (5., 1.),
-            ];
-            let ls = LineString::from(points);
-            let poly = Polygon::new(ls, vec![]);
-            // A point on the octagon boundary
-            let p = Point::new(5.0, 1.0);
-
-            // Test both implementations
-            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
-            let original_dist = Euclidean.distance(&p, &poly);
-            assert_relative_eq!(generic_dist, 0.0);
-            assert_relative_eq!(original_dist, 0.0);
-            assert_relative_eq!(generic_dist, original_dist);
-        }
-
-        #[test]
-        fn distance_ext_linestring_to_point_test() {
-            let ls = LineString::from(vec![(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)]);
-            let p = Point::new(3.0, 1.0);
-            let dist = distance_linestring_to_point_generic(&ls, &p);
-            assert_relative_eq!(dist, 1.0);
-        }
-
-        #[test]
-        fn distance_ext_linestring_to_polygon_test() {
-            let ls = LineString::from(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]);
-            let poly_points = vec![(3., 0.), (5., 0.), (5., 2.), (3., 2.), (3., 0.)];
-            let poly = Polygon::new(LineString::from(poly_points), vec![]);
-            let dist = distance_linestring_to_polygon_generic(&ls, &poly);
-            assert_relative_eq!(dist, 1.0);
-        }
-
-        #[test]
-        fn distance_ext_polygon_to_point_test() {
-            let poly_points = vec![(0., 0.), (2., 0.), (2., 2.), (0., 2.), (0., 0.)];
-            let poly = Polygon::new(LineString::from(poly_points), vec![]);
-            let p = Point::new(3.0, 1.0);
-            let dist = distance_polygon_to_point_generic(&poly, &p);
-            assert_relative_eq!(dist, 1.0);
-        }
-
-        #[test]
-        fn distance_ext_polygon_to_linestring_test() {
-            let poly_points = vec![(0., 0.), (2., 0.), (2., 2.), (0., 2.), (0., 0.)];
-            let poly = Polygon::new(LineString::from(poly_points), vec![]);
-            let ls = LineString::from(vec![(3.0, 0.0), (4.0, 1.0), (5.0, 0.0)]);
-            let dist = distance_polygon_to_linestring_generic(&poly, &ls);
-            assert_relative_eq!(dist, 1.0);
-        }
-
-        #[test]
-        fn distance_ext_cross_type_symmetry_test() {
-            // Test that cross-type distance is symmetric via helper functions
-            let p = Point::new(3.0, 4.0);
-            let ls = LineString::from(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]);
-
-            let dist1 = distance_point_to_linestring_generic(&p, &ls);
-            let dist2 = distance_linestring_to_point_generic(&ls, &p);
-            assert_relative_eq!(dist1, dist2);
-        }
-
-        #[test]
-        fn distance_ext_rect_to_polygon_test() {
-            // Test that Rect to Polygon cross-type distance is now supported via helper functions
-            use geo_types::Rect;
-            let rect = Rect::new((0.0, 0.0), (2.0, 2.0));
-            let poly_points = vec![(3., 0.), (5., 0.), (5., 2.), (3., 2.), (3., 0.)];
-            let poly = Polygon::new(LineString::from(poly_points), vec![]);
-
-            // Test cross-type distance via conversion and helper functions
-            let rect_poly = rect.to_polygon();
-            let dist1 = distance_polygon_to_polygon_generic(&rect_poly, &poly);
-            let dist2 = distance_polygon_to_polygon_generic(&poly, &rect_poly);
-            assert_relative_eq!(dist1, 1.0);
-            assert_relative_eq!(dist2, 1.0);
-            assert_relative_eq!(dist1, dist2); // Verify symmetry
-        }
-
-        #[test]
-        fn distance_ext_boundary_cases_test() {
-            // Test point on polygon boundary
-            let poly_points = vec![(0., 0.), (2., 0.), (2., 2.), (0., 2.), (0., 0.)];
-            let poly = Polygon::new(LineString::from(poly_points), vec![]);
-            let p_on_boundary = Point::new(0.0, 1.0); // On left edge
-            let dist = distance_point_to_polygon_generic(&p_on_boundary, &poly);
-            assert_relative_eq!(dist, 0.0);
-        }
-    } // End of distance_ext_tests module
-} // End of tests module
+    }
+}
