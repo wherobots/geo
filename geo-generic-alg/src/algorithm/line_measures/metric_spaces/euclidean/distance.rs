@@ -3,6 +3,7 @@ use crate::algorithm::Intersects;
 use crate::coordinate_position::{coord_pos_relative_to_ring, CoordPos};
 use crate::geometry::*;
 use crate::{CoordFloat, GeoFloat, GeoNum};
+use geo_traits::to_geo::ToGeoGeometry;
 use num_traits::{Bounded, Float};
 use rstar::primitives::CachedEnvelope;
 use rstar::RTree;
@@ -502,6 +503,7 @@ where
 // Macro for generating symmetric distance implementations
 macro_rules! symmetric_distance_generic_impl {
     ($func_name_ab:ident, $func_name_ba:ident, $trait_a:ident, $trait_b:ident) => {
+        #[allow(dead_code)]
         pub fn $func_name_ba<F, A, B>(b: &B, a: &A) -> F
         where
             F: GeoFloat,
@@ -640,14 +642,34 @@ where
     if let (Some(ext1), Some(ext2)) = (polygon1.exterior_ext(), polygon2.exterior_ext()) {
         // Convert to concrete Polygon types for intersection and containment checks
         // This is necessary because Intersects trait is implemented for concrete types
-        let ext1_coords: Vec<Coord<F>> = ext1.coords_ext().map(|c| Coord::from((c.x(), c.y()))).collect();
-        let ext2_coords: Vec<Coord<F>> = ext2.coords_ext().map(|c| Coord::from((c.x(), c.y()))).collect();
-
-        let interior1_coords: Vec<LineString<F>> = polygon1.interiors_ext()
-            .map(|ring| LineString::from(ring.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>()))
+        let ext1_coords: Vec<Coord<F>> = ext1
+            .coords_ext()
+            .map(|c| Coord::from((c.x(), c.y())))
             .collect();
-        let interior2_coords: Vec<LineString<F>> = polygon2.interiors_ext()
-            .map(|ring| LineString::from(ring.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>()))
+        let ext2_coords: Vec<Coord<F>> = ext2
+            .coords_ext()
+            .map(|c| Coord::from((c.x(), c.y())))
+            .collect();
+
+        let interior1_coords: Vec<LineString<F>> = polygon1
+            .interiors_ext()
+            .map(|ring| {
+                LineString::from(
+                    ring.coords_ext()
+                        .map(|c| (c.x(), c.y()))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect();
+        let interior2_coords: Vec<LineString<F>> = polygon2
+            .interiors_ext()
+            .map(|ring| {
+                LineString::from(
+                    ring.coords_ext()
+                        .map(|c| (c.x(), c.y()))
+                        .collect::<Vec<_>>(),
+                )
+            })
             .collect();
 
         let poly_a: Polygon<F> = Polygon::new(LineString::from(ext1_coords), interior1_coords);
@@ -666,7 +688,11 @@ where
                 if ring_contains_coord(poly_a.exterior(), coord_b) {
                     // check each ring distance, returning the minimum
                     let mut mindist: F = Float::max_value();
-                    let ext2_concrete = LineString::from(ext2.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>());
+                    let ext2_concrete = LineString::from(
+                        ext2.coords_ext()
+                            .map(|c| (c.x(), c.y()))
+                            .collect::<Vec<_>>(),
+                    );
                     for ring in poly_a.interiors() {
                         mindist = mindist.min(nearest_neighbour_distance(&ext2_concrete, ring));
                     }
@@ -682,7 +708,11 @@ where
                 let coord_a = Coord::from((first_coord_a.x(), first_coord_a.y()));
                 if ring_contains_coord(poly_b.exterior(), coord_a) {
                     let mut mindist: F = Float::max_value();
-                    let ext1_concrete = LineString::from(ext1.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>());
+                    let ext1_concrete = LineString::from(
+                        ext1.coords_ext()
+                            .map(|c| (c.x(), c.y()))
+                            .collect::<Vec<_>>(),
+                    );
                     for ring in poly_b.interiors() {
                         mindist = mindist.min(nearest_neighbour_distance(&ext1_concrete, ring));
                     }
@@ -692,8 +722,16 @@ where
         }
 
         // Default case - distance between exterior rings
-        let ext1_concrete = LineString::from(ext1.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>());
-        let ext2_concrete = LineString::from(ext2.coords_ext().map(|c| (c.x(), c.y())).collect::<Vec<_>>());
+        let ext1_concrete = LineString::from(
+            ext1.coords_ext()
+                .map(|c| (c.x(), c.y()))
+                .collect::<Vec<_>>(),
+        );
+        let ext2_concrete = LineString::from(
+            ext2.coords_ext()
+                .map(|c| (c.x(), c.y()))
+                .collect::<Vec<_>>(),
+        );
         nearest_neighbour_distance(&ext1_concrete, &ext2_concrete)
     } else {
         F::zero()
@@ -731,6 +769,7 @@ symmetric_distance_generic_impl!(
 // └────────────────────────────────────────────────────────────┘
 
 // LineString to LineString distance
+#[allow(dead_code)]
 pub fn distance_linestring_to_linestring_generic<F, LS1, LS2>(ls1: &LS1, ls2: &LS2) -> F
 where
     F: GeoFloat,
@@ -738,7 +777,10 @@ where
     LS2: LineStringTraitExt<T = F>,
 {
     ls1.lines()
-        .flat_map(|line1| ls2.lines().map(move |line2| distance_line_to_line_generic(&line1, &line2)))
+        .flat_map(|line1| {
+            ls2.lines()
+                .map(move |line2| distance_line_to_line_generic(&line1, &line2))
+        })
         .fold(Float::max_value(), |acc, dist| acc.min(dist))
 }
 
@@ -775,14 +817,21 @@ where
 {
     fn orientation<F: GeoFloat>(p: &Coord<F>, q: &Coord<F>, r: &Coord<F>) -> i8 {
         let val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
-        if val == F::zero() { 0 }  // collinear
-        else if val > F::zero() { 1 } // clockwise
-        else { 2 } // counterclockwise
+        if val == F::zero() {
+            0
+        }
+        // collinear
+        else if val > F::zero() {
+            1
+        }
+        // clockwise
+        else {
+            2
+        } // counterclockwise
     }
 
     fn on_segment<F: GeoFloat>(p: &Coord<F>, q: &Coord<F>, r: &Coord<F>) -> bool {
-        q.x <= p.x.max(r.x) && q.x >= p.x.min(r.x) &&
-        q.y <= p.y.max(r.y) && q.y >= p.y.min(r.y)
+        q.x <= p.x.max(r.x) && q.x >= p.x.min(r.x) && q.y <= p.y.max(r.y) && q.y >= p.y.min(r.y)
     }
 
     let o1 = orientation(p1, q1, p2);
@@ -796,10 +845,18 @@ where
     }
 
     // Special cases
-    if o1 == 0 && on_segment(p1, p2, q1) { return true; }
-    if o2 == 0 && on_segment(p1, q2, q1) { return true; }
-    if o3 == 0 && on_segment(p2, p1, q2) { return true; }
-    if o4 == 0 && on_segment(p2, q1, q2) { return true; }
+    if o1 == 0 && on_segment(p1, p2, q1) {
+        return true;
+    }
+    if o2 == 0 && on_segment(p1, q2, q1) {
+        return true;
+    }
+    if o3 == 0 && on_segment(p2, p1, q2) {
+        return true;
+    }
+    if o4 == 0 && on_segment(p2, q1, q2) {
+        return true;
+    }
 
     false
 }
@@ -990,6 +1047,25 @@ impl_distance_ext_for_iter_geometry_trait!(
     line_strings_ext
 );
 impl_distance_ext_for_iter_geometry_trait!(MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
+// GeometryCollection needs custom implementation due to mixed geometry types
+impl<F, GC: GeometryCollectionTraitExt<T = F>> GenericDistanceTrait<F, GeometryCollectionTag> for GC
+where
+    F: GeoFloat,
+{
+    fn generic_distance_trait(&self, other: &Self) -> F {
+        // Convert to concrete GeometryCollection for using the proven concrete implementation
+        let self_geometries: Vec<Geometry<F>> =
+            self.geometries_ext().map(|g| g.to_geometry()).collect();
+        let other_geometries: Vec<Geometry<F>> =
+            other.geometries_ext().map(|g| g.to_geometry()).collect();
+
+        let self_gc = GeometryCollection::new_from(self_geometries);
+        let other_gc = GeometryCollection::new_from(other_geometries);
+
+        // Use the concrete Distance trait implementation
+        Euclidean.distance(&self_gc, &other_gc)
+    }
+}
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementation for Geometry (generic traits)               │
@@ -1287,7 +1363,8 @@ mod tests {
                     assert_relative_eq!(dist4, generic_dist4);
                 }
                 if let Some(p1_coord_zero) = p1.coord_ext() {
-                    let generic_zero_dist = line_segment_distance_generic(&p1_coord_zero, &line_seg);
+                    let generic_zero_dist =
+                        line_segment_distance_generic(&p1_coord_zero, &line_seg);
                     assert_relative_eq!(generic_zero_dist, 0.0);
                     assert_relative_eq!(zero_dist, generic_zero_dist);
                 }
@@ -1705,7 +1782,8 @@ mod tests {
             assert_relative_eq!(distance, 64.03124237432849);
 
             // Test generic implementation - compute distance to each point and take minimum
-            let generic_min_dist = v.iter()
+            let generic_min_dist = v
+                .iter()
                 .map(|point| point_distance_generic(&p, point))
                 .fold(Float::max_value(), |acc: f64, dist| acc.min(dist));
             assert_relative_eq!(generic_min_dist, 64.03124237432849);
@@ -1867,7 +1945,8 @@ mod tests {
             assert_relative_eq!(dist, 21.0);
 
             // Test generic implementation
-            let generic_dist = distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
+            let generic_dist =
+                distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
             assert_relative_eq!(generic_dist, 21.0);
 
             // Ensure both implementations agree
@@ -1906,7 +1985,8 @@ mod tests {
             assert_relative_eq!(dist, 29.274562336608895);
 
             // Test generic implementation
-            let generic_dist = distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
+            let generic_dist =
+                distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
             assert_relative_eq!(generic_dist, 29.274562336608895);
 
             // Ensure both implementations agree
@@ -1945,7 +2025,8 @@ mod tests {
             assert_relative_eq!(dist, 12.0);
 
             // Test generic implementation
-            let generic_dist = distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
+            let generic_dist =
+                distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
             assert_relative_eq!(generic_dist, 12.0);
 
             // Ensure both implementations agree
@@ -2185,7 +2266,8 @@ mod tests {
             assert_relative_eq!(distance, 224.35357967013238);
 
             // Test generic implementation
-            let generic_distance = distance_polygon_to_polygon_generic(&first_polygon, &second_polygon);
+            let generic_distance =
+                distance_polygon_to_polygon_generic(&first_polygon, &second_polygon);
             assert_relative_eq!(generic_distance, 224.35357967013238);
 
             // Ensure both implementations agree
@@ -2370,11 +2452,9 @@ mod tests {
             let distance_gc_gc = Euclidean.distance(&test_gc, &gc);
             assert_relative_eq!(distance_gc_gc, 60.959002616512684);
 
-            // Note: GeometryCollection cross-validation is complex due to runtime type dispatch
-            // and the fact that GeometryCollection doesn't have simple generic function equivalents.
-            // The distance calculations for GeometryCollection work by iterating through each
-            // geometry and finding the minimum distance, which involves complex runtime type matching.
-            // For now, we test that the original implementations work correctly with the expected values.
+            // Cross-validation: GeometryCollection-to-GeometryCollection distance using generic implementations
+            let distance_gc_gc_generic = test_gc.distance_ext(&gc);
+            assert_relative_eq!(distance_gc_gc_generic, distance_gc_gc);
         }
     }
 }
