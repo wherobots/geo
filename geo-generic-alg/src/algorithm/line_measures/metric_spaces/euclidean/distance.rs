@@ -662,6 +662,144 @@ symmetric_distance_generic_impl!(
 );
 
 // ┌────────────────────────────────────────────────────────────┐
+// │ Additional missing generic distance functions              │
+// └────────────────────────────────────────────────────────────┘
+
+// LineString to LineString distance
+pub fn distance_linestring_to_linestring_generic<F, LS1, LS2>(ls1: &LS1, ls2: &LS2) -> F
+where
+    F: GeoFloat,
+    LS1: LineStringTraitExt<T = F>,
+    LS2: LineStringTraitExt<T = F>,
+{
+    ls1.lines()
+        .flat_map(|line1| ls2.lines().map(move |line2| distance_line_to_line_generic(&line1, &line2)))
+        .fold(Float::max_value(), |acc, dist| acc.min(dist))
+}
+
+// Line to Line distance
+pub fn distance_line_to_line_generic<F, L1, L2>(line1: &L1, line2: &L2) -> F
+where
+    F: GeoFloat,
+    L1: LineTraitExt<T = F>,
+    L2: LineTraitExt<T = F>,
+{
+    let start1 = line1.start_coord();
+    let end1 = line1.end_coord();
+    let start2 = line2.start_coord();
+    let end2 = line2.end_coord();
+
+    // Check if lines intersect
+    if lines_intersect(&start1, &end1, &start2, &end2) {
+        return F::zero();
+    }
+
+    // Find minimum distance between all endpoint combinations
+    let dist1 = line_segment_distance_generic(&start1, line2);
+    let dist2 = line_segment_distance_generic(&end1, line2);
+    let dist3 = line_segment_distance_generic(&start2, line1);
+    let dist4 = line_segment_distance_generic(&end2, line1);
+
+    dist1.min(dist2).min(dist3).min(dist4)
+}
+
+// Helper function to check if two line segments intersect
+fn lines_intersect<F>(p1: &Coord<F>, q1: &Coord<F>, p2: &Coord<F>, q2: &Coord<F>) -> bool
+where
+    F: GeoFloat,
+{
+    fn orientation<F: GeoFloat>(p: &Coord<F>, q: &Coord<F>, r: &Coord<F>) -> i8 {
+        let val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+        if val == F::zero() { 0 }  // collinear
+        else if val > F::zero() { 1 } // clockwise
+        else { 2 } // counterclockwise
+    }
+
+    fn on_segment<F: GeoFloat>(p: &Coord<F>, q: &Coord<F>, r: &Coord<F>) -> bool {
+        q.x <= p.x.max(r.x) && q.x >= p.x.min(r.x) &&
+        q.y <= p.y.max(r.y) && q.y >= p.y.min(r.y)
+    }
+
+    let o1 = orientation(p1, q1, p2);
+    let o2 = orientation(p1, q1, q2);
+    let o3 = orientation(p2, q2, p1);
+    let o4 = orientation(p2, q2, q1);
+
+    // General case
+    if o1 != o2 && o3 != o4 {
+        return true;
+    }
+
+    // Special cases
+    if o1 == 0 && on_segment(p1, p2, q1) { return true; }
+    if o2 == 0 && on_segment(p1, q2, q1) { return true; }
+    if o3 == 0 && on_segment(p2, p1, q2) { return true; }
+    if o4 == 0 && on_segment(p2, q1, q2) { return true; }
+
+    false
+}
+
+// Line to Polygon distance
+pub fn distance_line_to_polygon_generic<F, L, Poly>(line: &L, polygon: &Poly) -> F
+where
+    F: GeoFloat,
+    L: LineTraitExt<T = F>,
+    Poly: PolygonTraitExt<T = F>,
+{
+    // Convert line to linestring and use existing linestring-to-polygon function
+    let line_coords = vec![line.start_coord(), line.end_coord()];
+    let line_as_ls = LineString::from(line_coords);
+    distance_linestring_to_polygon_generic(&line_as_ls, polygon)
+}
+
+// Line to LineString distance (symmetric version will be generated)
+pub fn distance_line_to_linestring_generic<F, L, LS>(line: &L, linestring: &LS) -> F
+where
+    F: GeoFloat,
+    L: LineTraitExt<T = F>,
+    LS: LineStringTraitExt<T = F>,
+{
+    linestring
+        .lines()
+        .map(|ls_line| distance_line_to_line_generic(line, &ls_line))
+        .fold(Float::max_value(), |acc, dist| acc.min(dist))
+}
+
+// Triangle to Point distance
+pub fn distance_triangle_to_point_generic<F, T, P>(triangle: &T, point: &P) -> F
+where
+    F: GeoFloat,
+    T: TriangleTraitExt<T = F>,
+    P: PointTraitExt<T = F>,
+{
+    // Convert triangle to polygon and use existing point-to-polygon function
+    let tri_poly = triangle.to_polygon();
+    distance_point_to_polygon_generic(point, &tri_poly)
+}
+
+// Generate symmetric functions for new implementations
+symmetric_distance_generic_impl!(
+    distance_line_to_linestring_generic,
+    distance_linestring_to_line_generic,
+    LineTraitExt,
+    LineStringTraitExt
+);
+
+symmetric_distance_generic_impl!(
+    distance_line_to_polygon_generic,
+    distance_polygon_to_line_generic,
+    LineTraitExt,
+    PolygonTraitExt
+);
+
+symmetric_distance_generic_impl!(
+    distance_triangle_to_point_generic,
+    distance_point_to_triangle_generic,
+    TriangleTraitExt,
+    PointTraitExt
+);
+
+// ┌────────────────────────────────────────────────────────────┐
 // │ Cross-type DistanceExt macro implementations               │
 // └────────────────────────────────────────────────────────────┘
 
@@ -1077,8 +1215,17 @@ mod tests {
             let poly = Polygon::new(ls, vec![]);
             // A Random point outside the octagon
             let p = Point::new(2.5, 0.5);
+
+            // Test original implementation
             let dist = Euclidean.distance(&p, &poly);
             assert_relative_eq!(dist, 2.1213203435596424);
+
+            // Test generic implementation
+            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            assert_relative_eq!(generic_dist, 2.1213203435596424);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         // Point to Polygon, inside point
@@ -1099,8 +1246,17 @@ mod tests {
             let poly = Polygon::new(ls, vec![]);
             // A Random point inside the octagon
             let p = Point::new(5.5, 2.1);
+
+            // Test original implementation
             let dist = Euclidean.distance(&p, &poly);
             assert_relative_eq!(dist, 0.0);
+
+            // Test generic implementation
+            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            assert_relative_eq!(generic_dist, 0.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         // Point to Polygon, on boundary
@@ -1121,8 +1277,17 @@ mod tests {
             let poly = Polygon::new(ls, vec![]);
             // A point on the octagon
             let p = Point::new(5.0, 1.0);
+
+            // Test original implementation
             let dist = Euclidean.distance(&p, &poly);
             assert_relative_eq!(dist, 0.0);
+
+            // Test generic implementation
+            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            assert_relative_eq!(generic_dist, 0.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         // Point to Polygon, on boundary
@@ -1173,10 +1338,18 @@ mod tests {
             let poly = Polygon::new(ls_ext, vec![ls_int]);
             // A point inside the cutout triangle
             let p = Point::new(3.5, 2.5);
-            let dist = Euclidean.distance(&p, &poly);
 
+            // Test original implementation
+            let dist = Euclidean.distance(&p, &poly);
             // 0.41036467732879783 <-- Shapely
             assert_relative_eq!(dist, 0.41036467732879767);
+
+            // Test generic implementation
+            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            assert_relative_eq!(generic_dist, 0.41036467732879767);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
 
         #[test]
@@ -1245,8 +1418,17 @@ mod tests {
             let ls = LineString::from(points);
             // A Random point "inside" the LineString
             let p = Point::new(5.5, 2.1);
+
+            // Test original implementation
             let dist = Euclidean.distance(&p, &ls);
             assert_relative_eq!(dist, 1.1313708498984762);
+
+            // Test generic implementation
+            let generic_dist = distance_point_to_linestring_generic(&p, &ls);
+            assert_relative_eq!(generic_dist, 1.1313708498984762);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         // Point to LineString, point lies on the LineString
@@ -1265,8 +1447,17 @@ mod tests {
             let ls = LineString::from(points);
             // A point which lies on the LineString
             let p = Point::new(5.0, 4.0);
+
+            // Test original implementation
             let dist = Euclidean.distance(&p, &ls);
             assert_relative_eq!(dist, 0.0);
+
+            // Test generic implementation
+            let generic_dist = distance_point_to_linestring_generic(&p, &ls);
+            assert_relative_eq!(generic_dist, 0.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         // Point to LineString, closed triangle
@@ -1274,8 +1465,17 @@ mod tests {
             let points = vec![(3.5, 3.5), (4.4, 2.0), (2.6, 2.0), (3.5, 3.5)];
             let ls = LineString::from(points);
             let p = Point::new(3.5, 2.5);
+
+            // Test original implementation
             let dist = Euclidean.distance(&p, &ls);
             assert_relative_eq!(dist, 0.5);
+
+            // Test generic implementation
+            let generic_dist = distance_point_to_linestring_generic(&p, &ls);
+            assert_relative_eq!(generic_dist, 0.5);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         // Point to LineString, empty LineString
@@ -1509,7 +1709,17 @@ mod tests {
         fn test_linestring_distance() {
             let ring = geo_test_fixtures::ring::<f64>();
             let poly_in_ring = geo_test_fixtures::poly_in_ring::<f64>();
-            assert_relative_eq!(Euclidean.distance(&ring, &poly_in_ring), 5.992772737231033);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&ring, &poly_in_ring);
+            assert_relative_eq!(distance, 5.992772737231033);
+
+            // Test generic implementation
+            let generic_distance = distance_linestring_to_linestring_generic(&ring, &poly_in_ring);
+            assert_relative_eq!(generic_distance, 5.992772737231033);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
         #[test]
         // Line-Polygon test: closest point on Polygon is NOT nearest to a Line end-point
@@ -1517,7 +1727,17 @@ mod tests {
             let line = Line::from([(0.0, 0.0), (0.0, 3.0)]);
             let v = vec![(5.0, 1.0), (5.0, 2.0), (0.25, 1.5), (5.0, 1.0)];
             let poly = Polygon::new(v.into(), vec![]);
-            assert_relative_eq!(Euclidean.distance(&line, &poly), 0.25);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&line, &poly);
+            assert_relative_eq!(distance, 0.25);
+
+            // Test generic implementation
+            let generic_distance = distance_line_to_polygon_generic(&line, &poly);
+            assert_relative_eq!(generic_distance, 0.25);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
         #[test]
         // Line-Polygon test: Line intersects Polygon
@@ -1549,7 +1769,17 @@ mod tests {
         fn test_triangle_point_on_vertex_distance() {
             let triangle = Triangle::from([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)]);
             let point = Point::new(0.0, 0.0);
-            assert_relative_eq!(Euclidean.distance(&triangle, &point), 0.0);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&triangle, &point);
+            assert_relative_eq!(distance, 0.0);
+
+            // Test generic implementation
+            let generic_distance = distance_triangle_to_point_generic(&triangle, &point);
+            assert_relative_eq!(generic_distance, 0.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
 
         #[test]
