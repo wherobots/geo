@@ -26,7 +26,7 @@ mod destination;
 pub use destination::Destination;
 
 mod distance;
-pub use distance::{Distance, DistanceExt};
+pub use distance::Distance;
 
 mod interpolate_point;
 pub use interpolate_point::InterpolatePoint;
