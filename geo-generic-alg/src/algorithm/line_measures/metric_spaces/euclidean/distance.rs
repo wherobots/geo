@@ -440,18 +440,6 @@ macro_rules! impl_distance_ext_for_iter_geometry_trait {
     };
 }
 
-// ┌──────────────────────────────────────────────────────────┐
-// │ Helper functions for generic trait operations            │
-// └──────────────────────────────────────────────────────────┘
-
-// ┌────────────────────────────────────────────────────────────┐
-// │ Cross-type DistanceExt macro implementations               │
-// └────────────────────────────────────────────────────────────┘
-
-// ┌────────────────────────────────────────────────────────────┐
-// │ DistanceExt trait implementation using type-tag pattern   │
-// └────────────────────────────────────────────────────────────┘
-
 // Implementation of DistanceExt for same-type generic trait geometries using the type-tag pattern
 impl<F, G> DistanceExt<F> for G
 where
@@ -462,21 +450,6 @@ where
         self.generic_distance_trait(other)
     }
 }
-
-// Note: Cross-type distance support is implemented via the GeometryTag delegation pattern
-// in the GenericDistanceTrait implementation above. This approach is different from the
-// original Distance trait macro pattern due to Rust's coherence rules:
-//
-// Original Distance trait: impl Distance<F, A, B> for Euclidean
-//   - Multiple implementations don't conflict because they're all for the same type (Euclidean)
-//   - Can use macros to generate impl Distance<F, Point, LineString> for Euclidean, etc.
-//
-// DistanceExt trait: impl DistanceExt<F, B> for A
-//   - Would conflict with blanket impl DistanceExt<F> for G when A == B
-//   - Rust's orphan rule prevents having both blanket and specific implementations
-//
-// Solution: Use GeometryTraitExt runtime dispatch to handle all cross-type combinations
-// This provides the same functionality while being compatible with Rust's type system.
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Internal trait for direct distance calculations            │
