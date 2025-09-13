@@ -524,11 +524,18 @@ where
     P: PointTraitExt<T = F>,
     LS: LineStringTraitExt<T = F>,
 {
-    if let Some(coord) = point.coord() {
-        linestring
-            .lines()
-            .map(|line| line_segment_distance_generic(&coord, &line))
-            .fold(Float::max_value(), |acc, dist| acc.min(dist))
+    if let Some(coord) = point.coord_ext() {
+        let mut lines = linestring.lines();
+        if let Some(first_line) = lines.next() {
+            let mut min_distance = line_segment_distance_generic(&coord, &first_line);
+            for line in lines {
+                min_distance = min_distance.min(line_segment_distance_generic(&coord, &line));
+            }
+            min_distance
+        } else {
+            // Empty linestring
+            F::zero()
+        }
     } else {
         F::zero()
     }
@@ -586,6 +593,8 @@ where
 {
     if let Some(exterior) = polygon.exterior_ext() {
         let mut min_dist: F = Float::max_value();
+
+        // Calculate distance to exterior ring
         for line1 in linestring.lines() {
             for line2 in exterior.lines() {
                 let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
@@ -596,6 +605,21 @@ where
                 min_dist = min_dist.min(line_dist);
             }
         }
+
+        // Also calculate distance to interior rings (holes)
+        for interior in polygon.interiors_ext() {
+            for line1 in linestring.lines() {
+                for line2 in interior.lines() {
+                    let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
+                    let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
+                    let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
+                    let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
+                    let line_dist = d1.min(d2).min(d3).min(d4);
+                    min_dist = min_dist.min(line_dist);
+                }
+            }
+        }
+
         if min_dist == Float::max_value() {
             F::zero()
         } else {
@@ -615,6 +639,8 @@ where
 {
     if let (Some(ext1), Some(ext2)) = (polygon1.exterior_ext(), polygon2.exterior_ext()) {
         let mut min_dist: F = Float::max_value();
+
+        // Calculate distance between exterior rings
         for line1 in ext1.lines() {
             for line2 in ext2.lines() {
                 let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
@@ -625,6 +651,51 @@ where
                 min_dist = min_dist.min(line_dist);
             }
         }
+
+        // Calculate distance between exterior ring of polygon1 and interior rings of polygon2
+        for interior2 in polygon2.interiors_ext() {
+            for line1 in ext1.lines() {
+                for line2 in interior2.lines() {
+                    let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
+                    let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
+                    let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
+                    let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
+                    let line_dist = d1.min(d2).min(d3).min(d4);
+                    min_dist = min_dist.min(line_dist);
+                }
+            }
+        }
+
+        // Calculate distance between interior rings of polygon1 and exterior ring of polygon2
+        for interior1 in polygon1.interiors_ext() {
+            for line1 in interior1.lines() {
+                for line2 in ext2.lines() {
+                    let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
+                    let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
+                    let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
+                    let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
+                    let line_dist = d1.min(d2).min(d3).min(d4);
+                    min_dist = min_dist.min(line_dist);
+                }
+            }
+        }
+
+        // Calculate distance between interior rings of both polygons
+        for interior1 in polygon1.interiors_ext() {
+            for interior2 in polygon2.interiors_ext() {
+                for line1 in interior1.lines() {
+                    for line2 in interior2.lines() {
+                        let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
+                        let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
+                        let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
+                        let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
+                        let line_dist = d1.min(d2).min(d3).min(d4);
+                        min_dist = min_dist.min(line_dist);
+                    }
+                }
+            }
+        }
+
         if min_dist == Float::max_value() {
             F::zero()
         } else {
@@ -1183,6 +1254,7 @@ mod tests {
             let p1 = Point::new(7.2, 2.0);
             let p2 = Point::new(6.0, 1.0);
 
+            // Test original implementation
             let dist = line_segment_distance(o1, p1, p2);
             let dist2 = line_segment_distance(o2, p1, p2);
             let dist3 = line_segment_distance(o3, p1, p2);
@@ -1195,6 +1267,37 @@ mod tests {
             // Point is on the line
             let zero_dist = line_segment_distance(p1, p1, p2);
             assert_relative_eq!(zero_dist, 0.0);
+
+            // Test generic implementation
+            if let (Some(p1_coord), Some(p2_coord)) = (p1.coord_ext(), p2.coord_ext()) {
+                let line_seg = Line::new(*p1_coord, *p2_coord);
+
+                if let Some(o1_coord) = o1.coord_ext() {
+                    let generic_dist = line_segment_distance_generic(&o1_coord, &line_seg);
+                    assert_relative_eq!(generic_dist, 2.0485900789263356);
+                    assert_relative_eq!(dist, generic_dist);
+                }
+                if let Some(o2_coord) = o2.coord_ext() {
+                    let generic_dist2 = line_segment_distance_generic(&o2_coord, &line_seg);
+                    assert_relative_eq!(generic_dist2, 1.118033988749895);
+                    assert_relative_eq!(dist2, generic_dist2);
+                }
+                if let Some(o3_coord) = o3.coord_ext() {
+                    let generic_dist3 = line_segment_distance_generic(&o3_coord, &line_seg);
+                    assert_relative_eq!(generic_dist3, std::f64::consts::SQRT_2);
+                    assert_relative_eq!(dist3, generic_dist3);
+                }
+                if let Some(o4_coord) = o4.coord_ext() {
+                    let generic_dist4 = line_segment_distance_generic(&o4_coord, &line_seg);
+                    assert_relative_eq!(generic_dist4, 1.5811388300841898);
+                    assert_relative_eq!(dist4, generic_dist4);
+                }
+                if let Some(p1_coord_zero) = p1.coord_ext() {
+                    let generic_zero_dist = line_segment_distance_generic(&p1_coord_zero, &line_seg);
+                    assert_relative_eq!(generic_zero_dist, 0.0);
+                    assert_relative_eq!(zero_dist, generic_zero_dist);
+                }
+            }
         }
         #[test]
         // Point to Polygon, outside point
@@ -1302,7 +1405,17 @@ mod tests {
 
             let poly = Polygon::new(exterior, vec![]);
             let bugged_point = Point::new(0.0001, 0.);
-            assert_relative_eq!(Euclidean.distance(&poly, &bugged_point), 0.);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&poly, &bugged_point);
+            assert_relative_eq!(distance, 0.);
+
+            // Test generic implementation
+            let generic_distance = distance_polygon_to_point_generic(&poly, &bugged_point);
+            assert_relative_eq!(generic_distance, 0.);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
         #[test]
         // Point to Polygon, empty Polygon
@@ -1313,8 +1426,17 @@ mod tests {
             let poly = Polygon::new(ls, vec![]);
             // A point on the octagon
             let p = Point::new(2.5, 0.5);
+
+            // Test original implementation
             let dist = Euclidean.distance(&p, &poly);
             assert_relative_eq!(dist, 0.0);
+
+            // Test generic implementation
+            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            assert_relative_eq!(generic_dist, 0.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         // Point to Polygon with an interior ring
@@ -1386,9 +1508,18 @@ mod tests {
             let pnt1 = Point::new(0.0, 15.0);
             let pnt2 = Point::new(10.0, 20.0);
             let ln = Line::new(pnt1.0, pnt2.0);
+
+            // Test original implementation
             let dist_mp_ln = Euclidean.distance(&ln, &mp);
             let dist_pol1_ln = Euclidean.distance(&ln, &pol1);
             assert_relative_eq!(dist_mp_ln, dist_pol1_ln);
+
+            // Test generic implementation - compare line to polygon
+            let generic_dist_pol1_ln = distance_line_to_polygon_generic(&ln, &pol1);
+            assert_relative_eq!(generic_dist_pol1_ln, dist_pol1_ln);
+
+            // Ensure both implementations agree for the single polygon case
+            assert_relative_eq!(dist_pol1_ln, generic_dist_pol1_ln);
         }
 
         #[test]
@@ -1397,9 +1528,21 @@ mod tests {
             let ls2 = LineString::from(vec![(3.0, 0.0), (4.0, 10.0), (5.0, 0.0), (3.0, 0.0)]);
             let p1 = Polygon::new(ls1, vec![]);
             let p2 = Polygon::new(ls2, vec![]);
-            let mp = MultiPolygon::new(vec![p1, p2]);
+            let mp = MultiPolygon::new(vec![p1.clone(), p2.clone()]);
             let p = Point::new(50.0, 50.0);
-            assert_relative_eq!(Euclidean.distance(&p, &mp), 60.959002616512684);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&p, &mp);
+            assert_relative_eq!(distance, 60.959002616512684);
+
+            // Test generic implementation - compute distance to each polygon and take minimum
+            let generic_dist1 = distance_point_to_polygon_generic(&p, &p1);
+            let generic_dist2 = distance_point_to_polygon_generic(&p, &p2);
+            let generic_min_dist = generic_dist1.min(generic_dist2);
+            assert_relative_eq!(generic_min_dist, 60.959002616512684);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_min_dist);
         }
         #[test]
         // Point to LineString
@@ -1483,29 +1626,69 @@ mod tests {
             let points = vec![];
             let ls = LineString::new(points);
             let p = Point::new(5.0, 4.0);
+
+            // Test original implementation
             let dist = Euclidean.distance(&p, &ls);
             assert_relative_eq!(dist, 0.0);
+
+            // Test generic implementation
+            let generic_dist = distance_point_to_linestring_generic(&p, &ls);
+            assert_relative_eq!(generic_dist, 0.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         fn distance_multilinestring_test() {
             let v1 = LineString::from(vec![(0.0, 0.0), (1.0, 10.0)]);
             let v2 = LineString::from(vec![(1.0, 10.0), (2.0, 0.0), (3.0, 1.0)]);
-            let mls = MultiLineString::new(vec![v1, v2]);
+            let mls = MultiLineString::new(vec![v1.clone(), v2.clone()]);
             let p = Point::new(50.0, 50.0);
-            assert_relative_eq!(Euclidean.distance(&p, &mls), 63.25345840347388);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&p, &mls);
+            assert_relative_eq!(distance, 63.25345840347388);
+
+            // Test generic implementation - compute distance to each linestring and take minimum
+            let generic_dist1 = distance_point_to_linestring_generic(&p, &v1);
+            let generic_dist2 = distance_point_to_linestring_generic(&p, &v2);
+            let generic_min_dist = generic_dist1.min(generic_dist2);
+            assert_relative_eq!(generic_min_dist, 63.25345840347388);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_min_dist);
         }
         #[test]
         fn distance1_test() {
-            assert_relative_eq!(
-                Euclidean.distance(&Point::new(0., 0.), &Point::new(1., 0.)),
-                1.
-            );
+            let p1 = Point::new(0., 0.);
+            let p2 = Point::new(1., 0.);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&p1, &p2);
+            assert_relative_eq!(distance, 1.);
+
+            // Test generic implementation
+            let generic_distance = point_distance_generic(&p1, &p2);
+            assert_relative_eq!(generic_distance, 1.);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
         #[test]
         fn distance2_test() {
-            let dist =
-                Euclidean.distance(&Point::new(-72.1235, 42.3521), &Point::new(72.1260, 70.612));
+            let p1 = Point::new(-72.1235, 42.3521);
+            let p2 = Point::new(72.1260, 70.612);
+
+            // Test original implementation
+            let dist = Euclidean.distance(&p1, &p2);
             assert_relative_eq!(dist, 146.99163308930207);
+
+            // Test generic implementation
+            let generic_dist = point_distance_generic(&p1, &p2);
+            assert_relative_eq!(generic_dist, 146.99163308930207);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         fn distance_multipoint_test() {
@@ -1520,9 +1703,21 @@ mod tests {
                 Point::new(-1.0, 1.0),
                 Point::new(0.0, 10.0),
             ];
-            let mp = MultiPoint::new(v);
+            let mp = MultiPoint::new(v.clone());
             let p = Point::new(50.0, 50.0);
-            assert_relative_eq!(Euclidean.distance(&p, &mp), 64.03124237432849)
+
+            // Test original implementation
+            let distance = Euclidean.distance(&p, &mp);
+            assert_relative_eq!(distance, 64.03124237432849);
+
+            // Test generic implementation - compute distance to each point and take minimum
+            let generic_min_dist = v.iter()
+                .map(|point| point_distance_generic(&p, point))
+                .fold(Float::max_value(), |acc: f64, dist| acc.min(dist));
+            assert_relative_eq!(generic_min_dist, 64.03124237432849);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_min_dist);
         }
         #[test]
         fn distance_line_test() {
@@ -1530,21 +1725,72 @@ mod tests {
             let p0 = Point::new(2., 3.);
             let p1 = Point::new(3., 0.);
             let p2 = Point::new(6., 0.);
-            assert_relative_eq!(Euclidean.distance(&line0, &p0), 3.);
-            assert_relative_eq!(Euclidean.distance(&p0, &line0), 3.);
 
-            assert_relative_eq!(Euclidean.distance(&line0, &p1), 0.);
-            assert_relative_eq!(Euclidean.distance(&p1, &line0), 0.);
+            // Test original implementation
+            let dist_line_p0 = Euclidean.distance(&line0, &p0);
+            let dist_p0_line = Euclidean.distance(&p0, &line0);
+            assert_relative_eq!(dist_line_p0, 3.);
+            assert_relative_eq!(dist_p0_line, 3.);
 
-            assert_relative_eq!(Euclidean.distance(&line0, &p2), 1.);
-            assert_relative_eq!(Euclidean.distance(&p2, &line0), 1.);
+            let dist_line_p1 = Euclidean.distance(&line0, &p1);
+            let dist_p1_line = Euclidean.distance(&p1, &line0);
+            assert_relative_eq!(dist_line_p1, 0.);
+            assert_relative_eq!(dist_p1_line, 0.);
+
+            let dist_line_p2 = Euclidean.distance(&line0, &p2);
+            let dist_p2_line = Euclidean.distance(&p2, &line0);
+            assert_relative_eq!(dist_line_p2, 1.);
+            assert_relative_eq!(dist_p2_line, 1.);
+
+            // Test generic implementation
+            let generic_dist_p0 = if let Some(coord) = p0.coord_ext() {
+                line_segment_distance_generic(&coord, &line0)
+            } else {
+                0.0
+            };
+            let generic_dist_p1 = if let Some(coord) = p1.coord_ext() {
+                line_segment_distance_generic(&coord, &line0)
+            } else {
+                0.0
+            };
+            let generic_dist_p2 = if let Some(coord) = p2.coord_ext() {
+                line_segment_distance_generic(&coord, &line0)
+            } else {
+                0.0
+            };
+
+            assert_relative_eq!(generic_dist_p0, 3.);
+            assert_relative_eq!(generic_dist_p1, 0.);
+            assert_relative_eq!(generic_dist_p2, 1.);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist_line_p0, generic_dist_p0);
+            assert_relative_eq!(dist_p0_line, generic_dist_p0);
+            assert_relative_eq!(dist_line_p1, generic_dist_p1);
+            assert_relative_eq!(dist_p1_line, generic_dist_p1);
+            assert_relative_eq!(dist_line_p2, generic_dist_p2);
+            assert_relative_eq!(dist_p2_line, generic_dist_p2);
         }
         #[test]
         fn distance_line_line_test() {
             let line0 = Line::from([(0., 0.), (5., 0.)]);
             let line1 = Line::from([(2., 1.), (7., 2.)]);
-            assert_relative_eq!(Euclidean.distance(&line0, &line1), 1.);
-            assert_relative_eq!(Euclidean.distance(&line1, &line0), 1.);
+
+            // Test original implementation
+            let distance01 = Euclidean.distance(&line0, &line1);
+            let distance10 = Euclidean.distance(&line1, &line0);
+            assert_relative_eq!(distance01, 1.);
+            assert_relative_eq!(distance10, 1.);
+
+            // Test generic implementation
+            let generic_distance01 = distance_line_to_line_generic(&line0, &line1);
+            let generic_distance10 = distance_line_to_line_generic(&line1, &line0);
+            assert_relative_eq!(generic_distance01, 1.);
+            assert_relative_eq!(generic_distance10, 1.);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance01, generic_distance01);
+            assert_relative_eq!(distance10, generic_distance10);
         }
         #[test]
         // See https://github.com/georust/geo/issues/476
@@ -1577,7 +1823,17 @@ mod tests {
                     y: -0.15433610862574643,
                 },
             ];
-            assert_eq!(Euclidean.distance(&line, &poly), 0.18752558079168907);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&line, &poly);
+            assert_eq!(distance, 0.18752558079168907);
+
+            // Test generic implementation
+            let generic_distance = distance_line_to_polygon_generic(&line, &poly);
+            assert_relative_eq!(generic_distance, 0.18752558079168907);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
         #[test]
         // test edge-vertex minimum distance
@@ -1612,8 +1868,16 @@ mod tests {
                 .map(|e| Point::new(e.0, e.1))
                 .collect::<Vec<_>>();
             let poly2 = Polygon::new(LineString::from(points2), vec![]);
+            // Test original implementation
             let dist = nearest_neighbour_distance(poly1.exterior(), poly2.exterior());
             assert_relative_eq!(dist, 21.0);
+
+            // Test generic implementation
+            let generic_dist = distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
+            assert_relative_eq!(generic_dist, 21.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         // test vertex-vertex minimum distance
@@ -1643,8 +1907,16 @@ mod tests {
                 .map(|e| Point::new(e.0, e.1))
                 .collect::<Vec<_>>();
             let poly2 = Polygon::new(LineString::from(points2), vec![]);
+            // Test original implementation
             let dist = nearest_neighbour_distance(poly1.exterior(), poly2.exterior());
             assert_relative_eq!(dist, 29.274562336608895);
+
+            // Test generic implementation
+            let generic_dist = distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
+            assert_relative_eq!(generic_dist, 29.274562336608895);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         // test edge-edge minimum distance
@@ -1674,8 +1946,16 @@ mod tests {
                 .map(|e| Point::new(e.0, e.1))
                 .collect::<Vec<_>>();
             let poly2 = Polygon::new(LineString::from(points2), vec![]);
+            // Test original implementation
             let dist = nearest_neighbour_distance(poly1.exterior(), poly2.exterior());
             assert_relative_eq!(dist, 12.0);
+
+            // Test generic implementation
+            let generic_dist = distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
+            assert_relative_eq!(generic_dist, 12.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist, generic_dist);
         }
         #[test]
         fn test_large_polygon_distance() {
@@ -1688,9 +1968,18 @@ mod tests {
                 (4.921875, 66.33750501996518),
             ];
             let poly2 = Polygon::new(vec2.into(), vec![]);
+
+            // Test original implementation
             let distance = Euclidean.distance(&poly1, &poly2);
             // GEOS says 2.2864896295566055
             assert_relative_eq!(distance, 2.2864896295566055);
+
+            // Test generic implementation
+            let generic_distance = distance_polygon_to_polygon_generic(&poly1, &poly2);
+            assert_relative_eq!(generic_distance, 2.2864896295566055);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
         #[test]
         // A polygon inside another polygon's ring; they're disjoint in the DE-9IM sense:
@@ -1702,7 +1991,17 @@ mod tests {
             // inside is "inside" outside's ring, but they are disjoint
             let outside = Polygon::new(shell, vec![ring]);
             let inside = Polygon::new(poly_in_ring, vec![]);
-            assert_relative_eq!(Euclidean.distance(&outside, &inside), 5.992772737231033);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&outside, &inside);
+            assert_relative_eq!(distance, 5.992772737231033);
+
+            // Test generic implementation
+            let generic_distance = distance_polygon_to_polygon_generic(&outside, &inside);
+            assert_relative_eq!(generic_distance, 5.992772737231033);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
         #[test]
         // two ring LineStrings; one encloses the other but they neither touch nor intersect
@@ -1745,7 +2044,17 @@ mod tests {
             let line = Line::from([(0.5, 0.0), (0.0, 3.0)]);
             let v = vec![(5.0, 1.0), (5.0, 2.0), (0.25, 1.5), (5.0, 1.0)];
             let poly = Polygon::new(v.into(), vec![]);
-            assert_relative_eq!(Euclidean.distance(&line, &poly), 0.0);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&line, &poly);
+            assert_relative_eq!(distance, 0.0);
+
+            // Test generic implementation
+            let generic_distance = distance_line_to_polygon_generic(&line, &poly);
+            assert_relative_eq!(generic_distance, 0.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
         #[test]
         // Line-Polygon test: Line contained by interior ring
@@ -1754,14 +2063,34 @@ mod tests {
             let v = vec![(5.0, 1.0), (5.0, 2.0), (0.25, 1.0), (5.0, 1.0)];
             let v2 = vec![(4.5, 1.2), (4.5, 1.8), (3.5, 1.2), (4.5, 1.2)];
             let poly = Polygon::new(v.into(), vec![v2.into()]);
-            assert_relative_eq!(Euclidean.distance(&line, &poly), 0.04999999999999982);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&line, &poly);
+            assert_relative_eq!(distance, 0.04999999999999982);
+
+            // Test generic implementation
+            let generic_distance = distance_line_to_polygon_generic(&line, &poly);
+            assert_relative_eq!(generic_distance, 0.04999999999999982);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
         #[test]
         // LineString-Line test
         fn test_linestring_line_distance() {
             let line = Line::from([(0.0, 0.0), (0.0, 2.0)]);
             let ls: LineString<_> = vec![(3.0, 0.0), (1.0, 1.0), (3.0, 2.0)].into();
-            assert_relative_eq!(Euclidean.distance(&ls, &line), 1.0);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&ls, &line);
+            assert_relative_eq!(distance, 1.0);
+
+            // Test generic implementation
+            let generic_distance = distance_linestring_to_line_generic(&ls, &line);
+            assert_relative_eq!(generic_distance, 1.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
 
         #[test]
@@ -1787,7 +2116,17 @@ mod tests {
         fn test_triangle_point_on_edge_distance() {
             let triangle = Triangle::from([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)]);
             let point = Point::new(1.5, 0.0);
-            assert_relative_eq!(Euclidean.distance(&triangle, &point), 0.0);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&triangle, &point);
+            assert_relative_eq!(distance, 0.0);
+
+            // Test generic implementation
+            let generic_distance = distance_triangle_to_point_generic(&triangle, &point);
+            assert_relative_eq!(generic_distance, 0.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
 
         #[test]
@@ -1795,7 +2134,17 @@ mod tests {
         fn test_triangle_point_distance() {
             let triangle = Triangle::from([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)]);
             let point = Point::new(2.0, 3.0);
-            assert_relative_eq!(Euclidean.distance(&triangle, &point), 1.0);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&triangle, &point);
+            assert_relative_eq!(distance, 1.0);
+
+            // Test generic implementation
+            let generic_distance = distance_triangle_to_point_generic(&triangle, &point);
+            assert_relative_eq!(generic_distance, 1.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
 
         #[test]
@@ -1803,7 +2152,17 @@ mod tests {
         fn test_triangle_point_inside_distance() {
             let triangle = Triangle::from([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)]);
             let point = Point::new(1.0, 0.5);
-            assert_relative_eq!(Euclidean.distance(&triangle, &point), 0.0);
+
+            // Test original implementation
+            let distance = Euclidean.distance(&triangle, &point);
+            assert_relative_eq!(distance, 0.0);
+
+            // Test generic implementation
+            let generic_distance = distance_triangle_to_point_generic(&triangle, &point);
+            assert_relative_eq!(generic_distance, 0.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
 
         #[test]
@@ -1827,10 +2186,16 @@ mod tests {
             .into();
             let second_polygon = Polygon::new(ls2, vec![]);
 
-            assert_relative_eq!(
-                Euclidean.distance(&first_polygon, &second_polygon),
-                224.35357967013238
-            );
+            // Test original implementation
+            let distance = Euclidean.distance(&first_polygon, &second_polygon);
+            assert_relative_eq!(distance, 224.35357967013238);
+
+            // Test generic implementation
+            let generic_distance = distance_polygon_to_polygon_generic(&first_polygon, &second_polygon);
+            assert_relative_eq!(generic_distance, 224.35357967013238);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance, generic_distance);
         }
         #[test]
         fn fast_path_regression() {
@@ -1861,10 +2226,32 @@ mod tests {
                 (x: 50_f64, y: 200_f64),
             )
             .orient(Direction::Reversed);
-            assert_eq!(Euclidean.distance(&p1, &p2), 50.0f64);
-            assert_eq!(Euclidean.distance(&p3, &p4), 50.0f64);
-            assert_eq!(Euclidean.distance(&p1, &p4), 50.0f64);
-            assert_eq!(Euclidean.distance(&p2, &p3), 50.0f64);
+
+            // Test original implementation
+            let distance_p1_p2 = Euclidean.distance(&p1, &p2);
+            let distance_p3_p4 = Euclidean.distance(&p3, &p4);
+            let distance_p1_p4 = Euclidean.distance(&p1, &p4);
+            let distance_p2_p3 = Euclidean.distance(&p2, &p3);
+            assert_eq!(distance_p1_p2, 50.0f64);
+            assert_eq!(distance_p3_p4, 50.0f64);
+            assert_eq!(distance_p1_p4, 50.0f64);
+            assert_eq!(distance_p2_p3, 50.0f64);
+
+            // Test generic implementation
+            let generic_distance_p1_p2 = distance_polygon_to_polygon_generic(&p1, &p2);
+            let generic_distance_p3_p4 = distance_polygon_to_polygon_generic(&p3, &p4);
+            let generic_distance_p1_p4 = distance_polygon_to_polygon_generic(&p1, &p4);
+            let generic_distance_p2_p3 = distance_polygon_to_polygon_generic(&p2, &p3);
+            assert_relative_eq!(generic_distance_p1_p2, 50.0f64);
+            assert_relative_eq!(generic_distance_p3_p4, 50.0f64);
+            assert_relative_eq!(generic_distance_p1_p4, 50.0f64);
+            assert_relative_eq!(generic_distance_p2_p3, 50.0f64);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(distance_p1_p2, generic_distance_p1_p2);
+            assert_relative_eq!(distance_p3_p4, generic_distance_p3_p4);
+            assert_relative_eq!(distance_p1_p4, generic_distance_p1_p4);
+            assert_relative_eq!(distance_p2_p3, generic_distance_p2_p3);
         }
         #[test]
         fn rect_to_polygon_distance_test() {
@@ -1873,13 +2260,23 @@ mod tests {
             let poly_points = vec![(3., 0.), (5., 0.), (5., 2.), (3., 2.), (3., 0.)];
             let poly = Polygon::new(LineString::from(poly_points), vec![]);
 
-            // Test both directions
+            // Test original implementation (both directions)
             let dist1 = Euclidean.distance(&rect, &poly);
             let dist2 = Euclidean.distance(&poly, &rect);
-
             assert_relative_eq!(dist1, 1.0);
             assert_relative_eq!(dist2, 1.0);
             assert_relative_eq!(dist1, dist2); // Verify symmetry
+
+            // Test generic implementation
+            let rect_as_poly = rect.to_polygon();
+            let generic_dist1 = distance_polygon_to_polygon_generic(&rect_as_poly, &poly);
+            let generic_dist2 = distance_polygon_to_polygon_generic(&poly, &rect_as_poly);
+            assert_relative_eq!(generic_dist1, 1.0);
+            assert_relative_eq!(generic_dist2, 1.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(dist1, generic_dist1);
+            assert_relative_eq!(dist2, generic_dist2);
         }
 
         #[test]
@@ -1929,23 +2326,26 @@ mod tests {
                 Geometry::Rect(rect),
             ]);
 
+            // Test original implementations
             let test_p = Point::new(50., 50.);
-            assert_relative_eq!(Euclidean.distance(&test_p, &gc), 60.959002616512684);
+            let distance_p_gc = Euclidean.distance(&test_p, &gc);
+            assert_relative_eq!(distance_p_gc, 60.959002616512684);
 
             let test_multipoint = MultiPoint::new(vec![test_p]);
-            assert_relative_eq!(
-                Euclidean.distance(&test_multipoint, &gc),
-                60.959002616512684
-            );
+            let distance_mp_gc = Euclidean.distance(&test_multipoint, &gc);
+            assert_relative_eq!(distance_mp_gc, 60.959002616512684);
 
             let test_line = Line::from([(50., 50.), (60., 60.)]);
-            assert_relative_eq!(Euclidean.distance(&test_line, &gc), 60.959002616512684);
+            let distance_line_gc = Euclidean.distance(&test_line, &gc);
+            assert_relative_eq!(distance_line_gc, 60.959002616512684);
 
             let test_ls = LineString::from(vec![(50., 50.), (60., 60.), (70., 70.)]);
-            assert_relative_eq!(Euclidean.distance(&test_ls, &gc), 60.959002616512684);
+            let distance_ls_gc = Euclidean.distance(&test_ls, &gc);
+            assert_relative_eq!(distance_ls_gc, 60.959002616512684);
 
             let test_mls = MultiLineString::new(vec![test_ls]);
-            assert_relative_eq!(Euclidean.distance(&test_mls, &gc), 60.959002616512684);
+            let distance_mls_gc = Euclidean.distance(&test_mls, &gc);
+            assert_relative_eq!(distance_mls_gc, 60.959002616512684);
 
             let test_poly = Polygon::new(
                 LineString::from(vec![
@@ -1957,19 +2357,30 @@ mod tests {
                 ]),
                 vec![],
             );
-            assert_relative_eq!(Euclidean.distance(&test_poly, &gc), 60.959002616512684);
+            let distance_poly_gc = Euclidean.distance(&test_poly, &gc);
+            assert_relative_eq!(distance_poly_gc, 60.959002616512684);
 
             let test_multipoly = MultiPolygon::new(vec![test_poly]);
-            assert_relative_eq!(Euclidean.distance(&test_multipoly, &gc), 60.959002616512684);
+            let distance_multipoly_gc = Euclidean.distance(&test_multipoly, &gc);
+            assert_relative_eq!(distance_multipoly_gc, 60.959002616512684);
 
             let test_tri = Triangle::from([(50., 50.), (60., 50.), (55., 55.)]);
-            assert_relative_eq!(Euclidean.distance(&test_tri, &gc), 60.959002616512684);
+            let distance_tri_gc = Euclidean.distance(&test_tri, &gc);
+            assert_relative_eq!(distance_tri_gc, 60.959002616512684);
 
             let test_rect = Rect::new(coord! { x: 50., y: 50. }, coord! { x: 60., y: 60. });
-            assert_relative_eq!(Euclidean.distance(&test_rect, &gc), 60.959002616512684);
+            let distance_rect_gc = Euclidean.distance(&test_rect, &gc);
+            assert_relative_eq!(distance_rect_gc, 60.959002616512684);
 
             let test_gc = GeometryCollection(vec![Geometry::Rect(test_rect)]);
-            assert_relative_eq!(Euclidean.distance(&test_gc, &gc), 60.959002616512684);
+            let distance_gc_gc = Euclidean.distance(&test_gc, &gc);
+            assert_relative_eq!(distance_gc_gc, 60.959002616512684);
+
+            // Note: GeometryCollection cross-validation is complex due to runtime type dispatch
+            // and the fact that GeometryCollection doesn't have simple generic function equivalents.
+            // The distance calculations for GeometryCollection work by iterating through each
+            // geometry and finding the minimum distance, which involves complex runtime type matching.
+            // For now, we test that the original implementations work correctly with the expected values.
         }
     } // End of original_distance_tests module
 
