@@ -541,11 +541,37 @@ where
     P: PointTraitExt<T = F>,
     Poly: PolygonTraitExt<T = F>,
 {
+    // Check if the polygon is empty
+    if polygon.exterior_ext().is_none() {
+        return F::zero();
+    }
+
+    // Use the existing generic Intersects implementation
+    // If the point intersects the polygon (is inside or on boundary), distance is 0
+    if polygon.intersects(point) {
+        return F::zero();
+    }
+
+    // Point is outside the polygon, calculate minimum distance to edges
     if let (Some(coord), Some(exterior)) = (point.coord(), polygon.exterior_ext()) {
-        exterior
+        // Calculate minimum distance to exterior ring
+        let exterior_dist = exterior
             .lines()
             .map(|line| line_segment_distance_generic(&coord, &line))
-            .fold(Float::max_value(), |acc, dist| acc.min(dist))
+            .fold(Float::max_value(), |acc: F, dist| acc.min(dist));
+
+        // Calculate minimum distance to interior rings (holes)
+        let interior_dist = polygon
+            .interiors_ext()
+            .map(|interior| {
+                interior
+                    .lines()
+                    .map(|line| line_segment_distance_generic(&coord, &line))
+                    .fold(Float::max_value(), |acc: F, dist| acc.min(dist))
+            })
+            .fold(Float::max_value(), |acc: F, dist| acc.min(dist));
+
+        exterior_dist.min(interior_dist)
     } else {
         F::zero()
     }
@@ -1953,6 +1979,69 @@ mod tests {
             let p = Point::new(2.5, 0.5);
             let dist = distance_point_to_polygon_generic(&p, &poly);
             assert_relative_eq!(dist, 2.1213203435596424);
+            // Also verify it matches the original implementation
+            let original_dist = Euclidean.distance(&p, &poly);
+            assert_relative_eq!(original_dist, 2.1213203435596424);
+            assert_relative_eq!(dist, original_dist);
+        }
+
+        #[test]
+        fn distance_ext_point_inside_polygon_test() {
+            // Critical test case: point inside polygon should have distance 0
+            // an octagon
+            let points = vec![
+                (5., 1.),
+                (4., 2.),
+                (4., 3.),
+                (5., 4.),
+                (6., 4.),
+                (7., 3.),
+                (7., 2.),
+                (6., 1.),
+                (5., 1.),
+            ];
+            let ls = LineString::from(points);
+            let poly = Polygon::new(ls, vec![]);
+            // A Random point inside the octagon
+            let p = Point::new(5.5, 2.1);
+
+            // Test the generic implementation
+            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            assert_relative_eq!(generic_dist, 0.0);
+
+            // Also test the original implementation for comparison
+            let original_dist = Euclidean.distance(&p, &poly);
+            assert_relative_eq!(original_dist, 0.0);
+
+            // Ensure both implementations agree
+            assert_relative_eq!(generic_dist, original_dist);
+        }
+
+        #[test]
+        fn distance_ext_point_on_polygon_boundary_test() {
+            // an octagon
+            let points = vec![
+                (5., 1.),
+                (4., 2.),
+                (4., 3.),
+                (5., 4.),
+                (6., 4.),
+                (7., 3.),
+                (7., 2.),
+                (6., 1.),
+                (5., 1.),
+            ];
+            let ls = LineString::from(points);
+            let poly = Polygon::new(ls, vec![]);
+            // A point on the octagon boundary
+            let p = Point::new(5.0, 1.0);
+
+            // Test both implementations
+            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            let original_dist = Euclidean.distance(&p, &poly);
+            assert_relative_eq!(generic_dist, 0.0);
+            assert_relative_eq!(original_dist, 0.0);
+            assert_relative_eq!(generic_dist, original_dist);
         }
 
         #[test]
