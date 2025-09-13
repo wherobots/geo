@@ -1,5 +1,6 @@
 mod distance;
 mod utils;
+pub use distance::DistanceExt;
 
 use super::super::{Distance, InterpolatePoint};
 use crate::line_measures::densify::densify_between;
