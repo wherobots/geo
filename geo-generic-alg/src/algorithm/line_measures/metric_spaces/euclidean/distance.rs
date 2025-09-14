@@ -11,22 +11,15 @@ use super::utils::{
     distance_line_to_line_generic,
     distance_line_to_linestring_generic,
     distance_line_to_polygon_generic,
-    distance_linestring_to_line_generic,
-    distance_linestring_to_point_generic,
     distance_linestring_to_polygon_generic,
     distance_point_to_linestring_generic,
     distance_point_to_polygon_generic,
-    distance_polygon_to_linestring_generic,
-    distance_polygon_to_point_generic,
     distance_polygon_to_polygon_generic,
     line_segment_distance_generic,
     nearest_neighbour_distance,
     point_distance_generic,
     ring_contains_coord,
 };
-
-#[cfg(test)]
-use super::utils::{distance_linestring_to_linestring_generic, distance_triangle_to_point_generic};
 
 // Distance is a symmetric operation, so we can implement it once for both
 macro_rules! symmetric_distance_impl {
@@ -41,7 +34,6 @@ macro_rules! symmetric_distance_impl {
         }
     };
 }
-
 
 // ┌───────────────────────────┐
 // │ Implementations for Coord │
@@ -381,8 +373,6 @@ impl<F: GeoFloat> Distance<F, &Geometry<F>, &Geometry<F>> for Euclidean {
 // └──────────────────────────────────────────────────────────┘
 
 use geo_traits_ext::*;
-use geo_types::CoordNum;
-use crate::intersects::IntersectsTrait;
 
 /// Extension trait for generic geometry types to calculate distances directly
 /// using Euclidean metric space without conversion overhead
@@ -674,10 +664,22 @@ where
 
 // Symmetric LineString distance implementations
 // LineString-to-Point (symmetric to Point-to-LineString)
-symmetric_distance_ext_trait_impl!(GeoFloat, LineStringTraitExt, LineStringTag, PointTraitExt, PointTag);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    LineStringTraitExt,
+    LineStringTag,
+    PointTraitExt,
+    PointTag
+);
 
 // LineString-to-Line (symmetric to Line-to-LineString)
-symmetric_distance_ext_trait_impl!(GeoFloat, LineStringTraitExt, LineStringTag, LineTraitExt, LineTag);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    LineStringTraitExt,
+    LineStringTag,
+    LineTraitExt,
+    LineTag
+);
 
 // LineString-to-LineString direct distance implementation
 impl<F, LS: LineStringTraitExt<T = F>> GenericDistanceTrait<F, LineStringTag, LineStringTag, LS>
@@ -734,13 +736,25 @@ where
 
 // Symmetric Polygon distance implementations
 // Polygon-to-Point (symmetric to Point-to-Polygon)
-symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, PointTraitExt, PointTag);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    PolygonTraitExt,
+    PolygonTag,
+    PointTraitExt,
+    PointTag
+);
 
 // Polygon-to-Line (symmetric to Line-to-Polygon)
 symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineTraitExt, LineTag);
 
 // Polygon-to-LineString (symmetric to LineString-to-Polygon)
-symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineStringTraitExt, LineStringTag);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    PolygonTraitExt,
+    PolygonTag,
+    LineStringTraitExt,
+    LineStringTag
+);
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Rect and Triangle (generic traits)     │
@@ -750,16 +764,51 @@ symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineSt
 impl_distance_ext_for_polygonlike_geometry_trait!(TriangleTraitExt, TriangleTag, []);
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, PointTraitExt, PointTag);
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, LineTraitExt, LineTag);
-impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, LineStringTraitExt, LineStringTag);
+impl_polygonlike_to_geometry_distance!(
+    TriangleTraitExt,
+    TriangleTag,
+    LineStringTraitExt,
+    LineStringTag
+);
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, PolygonTraitExt, PolygonTag);
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, RectTraitExt, RectTag);
 
 // Symmetric implementations for Triangle
-symmetric_distance_ext_trait_impl!(GeoFloat, PointTraitExt, PointTag, TriangleTraitExt, TriangleTag);
-symmetric_distance_ext_trait_impl!(GeoFloat, LineTraitExt, LineTag, TriangleTraitExt, TriangleTag);
-symmetric_distance_ext_trait_impl!(GeoFloat, LineStringTraitExt, LineStringTag, TriangleTraitExt, TriangleTag);
-symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, TriangleTraitExt, TriangleTag);
-symmetric_distance_ext_trait_impl!(GeoFloat, RectTraitExt, RectTag, TriangleTraitExt, TriangleTag);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    PointTraitExt,
+    PointTag,
+    TriangleTraitExt,
+    TriangleTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    LineTraitExt,
+    LineTag,
+    TriangleTraitExt,
+    TriangleTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    LineStringTraitExt,
+    LineStringTag,
+    TriangleTraitExt,
+    TriangleTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    PolygonTraitExt,
+    PolygonTag,
+    TriangleTraitExt,
+    TriangleTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    RectTraitExt,
+    RectTag,
+    TriangleTraitExt,
+    TriangleTag
+);
 
 // Rect implementations
 impl_distance_ext_for_polygonlike_geometry_trait!(RectTraitExt, RectTag, []);
@@ -771,7 +820,13 @@ impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, PolygonTraitExt, P
 // Symmetric implementations for Rect (excluding Triangle which is already handled above)
 symmetric_distance_ext_trait_impl!(GeoFloat, PointTraitExt, PointTag, RectTraitExt, RectTag);
 symmetric_distance_ext_trait_impl!(GeoFloat, LineTraitExt, LineTag, RectTraitExt, RectTag);
-symmetric_distance_ext_trait_impl!(GeoFloat, LineStringTraitExt, LineStringTag, RectTraitExt, RectTag);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    LineStringTraitExt,
+    LineStringTag,
+    RectTraitExt,
+    RectTag
+);
 symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, RectTraitExt, RectTag);
 
 // ┌────────────────────────────────────────────────────────────┐
@@ -801,6 +856,9 @@ where
         match (self.as_type_ext(), rhs.as_type_ext()) {
             // Same-type combinations
             (GeometryTypeExt::Point(p1), GeometryTypeExt::Point(p2)) => p1.distance_ext(p2),
+            (GeometryTypeExt::Line(line1), GeometryTypeExt::Line(line2)) => {
+                line1.distance_ext(line2)
+            }
             (GeometryTypeExt::LineString(ls1), GeometryTypeExt::LineString(ls2)) => {
                 ls1.distance_ext(ls2)
             }
@@ -816,47 +874,29 @@ where
             (GeometryTypeExt::MultiPolygon(mp1), GeometryTypeExt::MultiPolygon(mp2)) => {
                 mp1.distance_ext(mp2)
             }
+            // GeometryCollection-to-GeometryCollection
             (GeometryTypeExt::Rect(rect1), GeometryTypeExt::Rect(rect2)) => {
                 rect1.distance_ext(rect2)
             }
             (GeometryTypeExt::Triangle(tri1), GeometryTypeExt::Triangle(tri2)) => {
                 tri1.distance_ext(tri2)
             }
-            (GeometryTypeExt::Line(line1), GeometryTypeExt::Line(line2)) => {
-                line1.distance_ext(line2)
-            }
 
             // Cross-type combinations using distance_ext
-            (GeometryTypeExt::Point(p), GeometryTypeExt::LineString(ls)) => {
-                p.distance_ext(ls)
-            }
-            (GeometryTypeExt::LineString(ls), GeometryTypeExt::Point(p)) => {
-                ls.distance_ext(p)
-            }
-            (GeometryTypeExt::Point(p), GeometryTypeExt::Polygon(poly)) => {
-                p.distance_ext(poly)
-            }
-            (GeometryTypeExt::Polygon(poly), GeometryTypeExt::Point(p)) => {
-                poly.distance_ext(p)
-            }
+            (GeometryTypeExt::Point(p), GeometryTypeExt::LineString(ls)) => p.distance_ext(ls),
+            (GeometryTypeExt::LineString(ls), GeometryTypeExt::Point(p)) => ls.distance_ext(p),
+            (GeometryTypeExt::Point(p), GeometryTypeExt::Polygon(poly)) => p.distance_ext(poly),
+            (GeometryTypeExt::Polygon(poly), GeometryTypeExt::Point(p)) => poly.distance_ext(p),
             (GeometryTypeExt::LineString(ls), GeometryTypeExt::Polygon(poly)) => {
                 ls.distance_ext(poly)
             }
             (GeometryTypeExt::Polygon(poly), GeometryTypeExt::LineString(ls)) => {
                 poly.distance_ext(ls)
             }
-            (GeometryTypeExt::Point(p), GeometryTypeExt::Line(line)) => {
-                p.distance_ext(line)
-            }
-            (GeometryTypeExt::Line(line), GeometryTypeExt::Point(p)) => {
-                line.distance_ext(p)
-            }
-            (GeometryTypeExt::LineString(ls), GeometryTypeExt::Line(line)) => {
-                ls.distance_ext(line)
-            }
-            (GeometryTypeExt::Line(line), GeometryTypeExt::LineString(ls)) => {
-                line.distance_ext(ls)
-            }
+            (GeometryTypeExt::Point(p), GeometryTypeExt::Line(line)) => p.distance_ext(line),
+            (GeometryTypeExt::Line(line), GeometryTypeExt::Point(p)) => line.distance_ext(p),
+            (GeometryTypeExt::LineString(ls), GeometryTypeExt::Line(line)) => ls.distance_ext(line),
+            (GeometryTypeExt::Line(line), GeometryTypeExt::LineString(ls)) => line.distance_ext(ls),
             (GeometryTypeExt::Polygon(poly), GeometryTypeExt::Line(line)) => {
                 poly.distance_ext(line)
             }
@@ -865,18 +905,10 @@ where
             }
 
             // Cross-type combinations with Rect
-            (GeometryTypeExt::Point(p), GeometryTypeExt::Rect(rect)) => {
-                p.distance_ext(rect)
-            }
-            (GeometryTypeExt::Rect(rect), GeometryTypeExt::Point(p)) => {
-                rect.distance_ext(p)
-            }
-            (GeometryTypeExt::LineString(ls), GeometryTypeExt::Rect(rect)) => {
-                ls.distance_ext(rect)
-            }
-            (GeometryTypeExt::Rect(rect), GeometryTypeExt::LineString(ls)) => {
-                rect.distance_ext(ls)
-            }
+            (GeometryTypeExt::Point(p), GeometryTypeExt::Rect(rect)) => p.distance_ext(rect),
+            (GeometryTypeExt::Rect(rect), GeometryTypeExt::Point(p)) => rect.distance_ext(p),
+            (GeometryTypeExt::LineString(ls), GeometryTypeExt::Rect(rect)) => ls.distance_ext(rect),
+            (GeometryTypeExt::Rect(rect), GeometryTypeExt::LineString(ls)) => rect.distance_ext(ls),
             (GeometryTypeExt::Polygon(poly), GeometryTypeExt::Rect(rect)) => {
                 poly.distance_ext(rect)
             }
@@ -885,12 +917,8 @@ where
             }
 
             // Cross-type combinations with Triangle
-            (GeometryTypeExt::Point(p), GeometryTypeExt::Triangle(tri)) => {
-                p.distance_ext(tri)
-            }
-            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Point(p)) => {
-                tri.distance_ext(p)
-            }
+            (GeometryTypeExt::Point(p), GeometryTypeExt::Triangle(tri)) => p.distance_ext(tri),
+            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Point(p)) => tri.distance_ext(p),
             (GeometryTypeExt::LineString(ls), GeometryTypeExt::Triangle(tri)) => {
                 ls.distance_ext(tri)
             }
@@ -905,26 +933,14 @@ where
             }
 
             // Cross-type combinations Rect-Triangle
-            (GeometryTypeExt::Rect(rect), GeometryTypeExt::Triangle(tri)) => {
-                rect.distance_ext(tri)
-            }
-            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Rect(rect)) => {
-                tri.distance_ext(rect)
-            }
+            (GeometryTypeExt::Rect(rect), GeometryTypeExt::Triangle(tri)) => rect.distance_ext(tri),
+            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Rect(rect)) => tri.distance_ext(rect),
 
             // Cross-type combinations with Line for Rect and Triangle
-            (GeometryTypeExt::Line(line), GeometryTypeExt::Rect(rect)) => {
-                line.distance_ext(rect)
-            }
-            (GeometryTypeExt::Rect(rect), GeometryTypeExt::Line(line)) => {
-                rect.distance_ext(line)
-            }
-            (GeometryTypeExt::Line(line), GeometryTypeExt::Triangle(tri)) => {
-                line.distance_ext(tri)
-            }
-            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Line(line)) => {
-                tri.distance_ext(line)
-            }
+            (GeometryTypeExt::Line(line), GeometryTypeExt::Rect(rect)) => line.distance_ext(rect),
+            (GeometryTypeExt::Rect(rect), GeometryTypeExt::Line(line)) => rect.distance_ext(line),
+            (GeometryTypeExt::Line(line), GeometryTypeExt::Triangle(tri)) => line.distance_ext(tri),
+            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Line(line)) => tri.distance_ext(line),
 
             // Multi-geometry and GeometryCollection combinations fall through to concrete conversion
             // due to trait bound complexity with associated types
@@ -938,42 +954,6 @@ where
         }
     }
 }
-
-// ┌────────────────────────────────────────────────────────────┐
-// │ Improved Implementation Following Concrete Pattern         │
-// └────────────────────────────────────────────────────────────┘
-
-/// Generic trait distance implementation for every specific geometry type to GeometryTraitExt<T>.
-/// Follows the same elegant pattern as the concrete impl_euclidean_distance_for_geometry_and_variant! macro.
-macro_rules! impl_generic_distance_for_geometry_and_variant_new {
-    ([$($target_trait:ident, $target_tag:ident),*]) => {
-        $(
-            impl<F, LHS, RHS> GenericDistanceTrait<F, $target_tag, GeometryTag, RHS> for LHS
-            where
-                F: GeoFloat,
-                LHS: $target_trait<T = F>,
-                RHS: GeometryTraitExt<T = F>,
-            {
-                fn generic_distance_trait(&self, rhs: &RHS) -> F {
-                    use geo_traits_ext::GeometryTypeExt;
-                    match rhs.as_type_ext() {
-                        GeometryTypeExt::Point(point) => self.generic_distance_trait(&point),
-                        GeometryTypeExt::Line(line) => self.generic_distance_trait(&line),
-                        GeometryTypeExt::LineString(line_string) => self.generic_distance_trait(&line_string),
-                        GeometryTypeExt::Polygon(polygon) => self.generic_distance_trait(&polygon),
-                        GeometryTypeExt::MultiPoint(multi_point) => self.generic_distance_trait(&multi_point),
-                        GeometryTypeExt::MultiLineString(multi_line_string) => self.generic_distance_trait(&multi_line_string),
-                        GeometryTypeExt::MultiPolygon(multi_polygon) => self.generic_distance_trait(&multi_polygon),
-                        GeometryTypeExt::GeometryCollection(geometry_collection) => self.generic_distance_trait(&geometry_collection),
-                        GeometryTypeExt::Rect(rect) => self.generic_distance_trait(&rect),
-                        GeometryTypeExt::Triangle(triangle) => self.generic_distance_trait(&triangle),
-                    }
-                }
-            }
-        )*
-    };
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -1066,7 +1046,7 @@ mod tests {
             assert_relative_eq!(dist, 2.1213203435596424);
 
             // Test generic implementation
-            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            let generic_dist = p.distance_ext(&poly);
             assert_relative_eq!(generic_dist, 2.1213203435596424);
 
             // Ensure both implementations agree
@@ -1097,7 +1077,7 @@ mod tests {
             assert_relative_eq!(dist, 0.0);
 
             // Test generic implementation
-            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            let generic_dist = p.distance_ext(&poly);
             assert_relative_eq!(generic_dist, 0.0);
 
             // Ensure both implementations agree
@@ -1128,7 +1108,7 @@ mod tests {
             assert_relative_eq!(dist, 0.0);
 
             // Test generic implementation
-            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            let generic_dist = p.distance_ext(&poly);
             assert_relative_eq!(generic_dist, 0.0);
 
             // Ensure both implementations agree
@@ -1153,7 +1133,7 @@ mod tests {
             assert_relative_eq!(distance, 0.);
 
             // Test generic implementation
-            let generic_distance = distance_polygon_to_point_generic(&poly, &bugged_point);
+            let generic_distance = poly.distance_ext(&bugged_point);
             assert_relative_eq!(generic_distance, 0.);
 
             // Ensure both implementations agree
@@ -1174,7 +1154,7 @@ mod tests {
             assert_relative_eq!(dist, 0.0);
 
             // Test generic implementation
-            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            let generic_dist = p.distance_ext(&poly);
             assert_relative_eq!(generic_dist, 0.0);
 
             // Ensure both implementations agree
@@ -1209,7 +1189,7 @@ mod tests {
             assert_relative_eq!(dist, 0.41036467732879767);
 
             // Test generic implementation
-            let generic_dist = distance_point_to_polygon_generic(&p, &poly);
+            let generic_dist = p.distance_ext(&poly);
             assert_relative_eq!(generic_dist, 0.41036467732879767);
 
             // Ensure both implementations agree
@@ -1257,7 +1237,7 @@ mod tests {
             assert_relative_eq!(dist_mp_ln, dist_pol1_ln);
 
             // Test generic implementation - compare line to polygon
-            let generic_dist_pol1_ln = distance_line_to_polygon_generic(&ln, &pol1);
+            let generic_dist_pol1_ln = ln.distance_ext(&pol1);
             assert_relative_eq!(generic_dist_pol1_ln, dist_pol1_ln);
 
             // Ensure both implementations agree for the single polygon case
@@ -1278,8 +1258,8 @@ mod tests {
             assert_relative_eq!(distance, 60.959002616512684);
 
             // Test generic implementation - compute distance to each polygon and take minimum
-            let generic_dist1 = distance_point_to_polygon_generic(&p, &p1);
-            let generic_dist2 = distance_point_to_polygon_generic(&p, &p2);
+            let generic_dist1 = p.distance_ext(&p1);
+            let generic_dist2 = p.distance_ext(&p2);
             let generic_min_dist = generic_dist1.min(generic_dist2);
             assert_relative_eq!(generic_min_dist, 60.959002616512684);
 
@@ -1309,7 +1289,7 @@ mod tests {
             assert_relative_eq!(dist, 1.1313708498984762);
 
             // Test generic implementation
-            let generic_dist = distance_point_to_linestring_generic(&p, &ls);
+            let generic_dist = p.distance_ext(&ls);
             assert_relative_eq!(generic_dist, 1.1313708498984762);
 
             // Ensure both implementations agree
@@ -1338,7 +1318,7 @@ mod tests {
             assert_relative_eq!(dist, 0.0);
 
             // Test generic implementation
-            let generic_dist = distance_point_to_linestring_generic(&p, &ls);
+            let generic_dist = p.distance_ext(&ls);
             assert_relative_eq!(generic_dist, 0.0);
 
             // Ensure both implementations agree
@@ -1356,7 +1336,7 @@ mod tests {
             assert_relative_eq!(dist, 0.5);
 
             // Test generic implementation
-            let generic_dist = distance_point_to_linestring_generic(&p, &ls);
+            let generic_dist = p.distance_ext(&ls);
             assert_relative_eq!(generic_dist, 0.5);
 
             // Ensure both implementations agree
@@ -1374,7 +1354,7 @@ mod tests {
             assert_relative_eq!(dist, 0.0);
 
             // Test generic implementation
-            let generic_dist = distance_point_to_linestring_generic(&p, &ls);
+            let generic_dist = p.distance_ext(&ls);
             assert_relative_eq!(generic_dist, 0.0);
 
             // Ensure both implementations agree
@@ -1392,8 +1372,8 @@ mod tests {
             assert_relative_eq!(distance, 63.25345840347388);
 
             // Test generic implementation - compute distance to each linestring and take minimum
-            let generic_dist1 = distance_point_to_linestring_generic(&p, &v1);
-            let generic_dist2 = distance_point_to_linestring_generic(&p, &v2);
+            let generic_dist1 = p.distance_ext(&v1);
+            let generic_dist2 = p.distance_ext(&v2);
             let generic_min_dist = generic_dist1.min(generic_dist2);
             assert_relative_eq!(generic_min_dist, 63.25345840347388);
 
@@ -1526,8 +1506,8 @@ mod tests {
             assert_relative_eq!(distance10, 1.);
 
             // Test generic implementation
-            let generic_distance01 = distance_line_to_line_generic(&line0, &line1);
-            let generic_distance10 = distance_line_to_line_generic(&line1, &line0);
+            let generic_distance01 = line0.distance_ext(&line1);
+            let generic_distance10 = line1.distance_ext(&line0);
             assert_relative_eq!(generic_distance01, 1.);
             assert_relative_eq!(generic_distance10, 1.);
 
@@ -1572,7 +1552,7 @@ mod tests {
             assert_eq!(distance, 0.18752558079168907);
 
             // Test generic implementation
-            let generic_distance = distance_line_to_polygon_generic(&line, &poly);
+            let generic_distance = line.distance_ext(&poly);
             assert_relative_eq!(generic_distance, 0.18752558079168907);
 
             // Ensure both implementations agree
@@ -1616,8 +1596,7 @@ mod tests {
             assert_relative_eq!(dist, 21.0);
 
             // Test generic implementation
-            let generic_dist =
-                distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
+            let generic_dist = poly1.exterior().distance_ext(poly2.exterior());
             assert_relative_eq!(generic_dist, 21.0);
 
             // Ensure both implementations agree
@@ -1656,8 +1635,7 @@ mod tests {
             assert_relative_eq!(dist, 29.274562336608895);
 
             // Test generic implementation
-            let generic_dist =
-                distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
+            let generic_dist = poly1.exterior().distance_ext(poly2.exterior());
             assert_relative_eq!(generic_dist, 29.274562336608895);
 
             // Ensure both implementations agree
@@ -1696,8 +1674,7 @@ mod tests {
             assert_relative_eq!(dist, 12.0);
 
             // Test generic implementation
-            let generic_dist =
-                distance_linestring_to_linestring_generic(poly1.exterior(), poly2.exterior());
+            let generic_dist = poly1.exterior().distance_ext(poly2.exterior());
             assert_relative_eq!(generic_dist, 12.0);
 
             // Ensure both implementations agree
@@ -1721,7 +1698,7 @@ mod tests {
             assert_relative_eq!(distance, 2.2864896295566055);
 
             // Test generic implementation
-            let generic_distance = distance_polygon_to_polygon_generic(&poly1, &poly2);
+            let generic_distance = poly1.distance_ext(&poly2);
             assert_relative_eq!(generic_distance, 2.2864896295566055);
 
             // Ensure both implementations agree
@@ -1743,7 +1720,7 @@ mod tests {
             assert_relative_eq!(distance, 5.992772737231033);
 
             // Test generic implementation
-            let generic_distance = distance_polygon_to_polygon_generic(&outside, &inside);
+            let generic_distance = outside.distance_ext(&inside);
             assert_relative_eq!(generic_distance, 5.992772737231033);
 
             // Ensure both implementations agree
@@ -1760,7 +1737,7 @@ mod tests {
             assert_relative_eq!(distance, 5.992772737231033);
 
             // Test generic implementation
-            let generic_distance = distance_linestring_to_linestring_generic(&ring, &poly_in_ring);
+            let generic_distance = ring.distance_ext(&poly_in_ring);
             assert_relative_eq!(generic_distance, 5.992772737231033);
 
             // Ensure both implementations agree
@@ -1778,7 +1755,7 @@ mod tests {
             assert_relative_eq!(distance, 0.25);
 
             // Test generic implementation
-            let generic_distance = distance_line_to_polygon_generic(&line, &poly);
+            let generic_distance = line.distance_ext(&poly);
             assert_relative_eq!(generic_distance, 0.25);
 
             // Ensure both implementations agree
@@ -1796,7 +1773,7 @@ mod tests {
             assert_relative_eq!(distance, 0.0);
 
             // Test generic implementation
-            let generic_distance = distance_line_to_polygon_generic(&line, &poly);
+            let generic_distance = line.distance_ext(&poly);
             assert_relative_eq!(generic_distance, 0.0);
 
             // Ensure both implementations agree
@@ -1815,7 +1792,7 @@ mod tests {
             assert_relative_eq!(distance, 0.04999999999999982);
 
             // Test generic implementation
-            let generic_distance = distance_line_to_polygon_generic(&line, &poly);
+            let generic_distance = line.distance_ext(&poly);
             assert_relative_eq!(generic_distance, 0.04999999999999982);
 
             // Ensure both implementations agree
@@ -1832,7 +1809,7 @@ mod tests {
             assert_relative_eq!(distance, 1.0);
 
             // Test generic implementation
-            let generic_distance = distance_linestring_to_line_generic(&ls, &line);
+            let generic_distance = ls.distance_ext(&line);
             assert_relative_eq!(generic_distance, 1.0);
 
             // Ensure both implementations agree
@@ -1850,7 +1827,7 @@ mod tests {
             assert_relative_eq!(distance, 0.0);
 
             // Test generic implementation
-            let generic_distance = distance_triangle_to_point_generic(&triangle, &point);
+            let generic_distance = triangle.distance_ext(&point);
             assert_relative_eq!(generic_distance, 0.0);
 
             // Ensure both implementations agree
@@ -1868,7 +1845,7 @@ mod tests {
             assert_relative_eq!(distance, 0.0);
 
             // Test generic implementation
-            let generic_distance = distance_triangle_to_point_generic(&triangle, &point);
+            let generic_distance = triangle.distance_ext(&point);
             assert_relative_eq!(generic_distance, 0.0);
 
             // Ensure both implementations agree
@@ -1886,7 +1863,7 @@ mod tests {
             assert_relative_eq!(distance, 1.0);
 
             // Test generic implementation
-            let generic_distance = distance_triangle_to_point_generic(&triangle, &point);
+            let generic_distance = triangle.distance_ext(&point);
             assert_relative_eq!(generic_distance, 1.0);
 
             // Ensure both implementations agree
@@ -1904,7 +1881,7 @@ mod tests {
             assert_relative_eq!(distance, 0.0);
 
             // Test generic implementation
-            let generic_distance = distance_triangle_to_point_generic(&triangle, &point);
+            let generic_distance = triangle.distance_ext(&point);
             assert_relative_eq!(generic_distance, 0.0);
 
             // Ensure both implementations agree
@@ -1937,8 +1914,7 @@ mod tests {
             assert_relative_eq!(distance, 224.35357967013238);
 
             // Test generic implementation
-            let generic_distance =
-                distance_polygon_to_polygon_generic(&first_polygon, &second_polygon);
+            let generic_distance = first_polygon.distance_ext(&second_polygon);
             assert_relative_eq!(generic_distance, 224.35357967013238);
 
             // Ensure both implementations agree
@@ -1985,10 +1961,10 @@ mod tests {
             assert_eq!(distance_p2_p3, 50.0f64);
 
             // Test generic implementation
-            let generic_distance_p1_p2 = distance_polygon_to_polygon_generic(&p1, &p2);
-            let generic_distance_p3_p4 = distance_polygon_to_polygon_generic(&p3, &p4);
-            let generic_distance_p1_p4 = distance_polygon_to_polygon_generic(&p1, &p4);
-            let generic_distance_p2_p3 = distance_polygon_to_polygon_generic(&p2, &p3);
+            let generic_distance_p1_p2 = p1.distance_ext(&p2);
+            let generic_distance_p3_p4 = p3.distance_ext(&p4);
+            let generic_distance_p1_p4 = p1.distance_ext(&p4);
+            let generic_distance_p2_p3 = p2.distance_ext(&p3);
             assert_relative_eq!(generic_distance_p1_p2, 50.0f64);
             assert_relative_eq!(generic_distance_p3_p4, 50.0f64);
             assert_relative_eq!(generic_distance_p1_p4, 50.0f64);
@@ -2016,8 +1992,8 @@ mod tests {
 
             // Test generic implementation
             let rect_as_poly = rect.to_polygon();
-            let generic_dist1 = distance_polygon_to_polygon_generic(&rect_as_poly, &poly);
-            let generic_dist2 = distance_polygon_to_polygon_generic(&poly, &rect_as_poly);
+            let generic_dist1 = rect_as_poly.distance_ext(&poly);
+            let generic_dist2 = poly.distance_ext(&rect_as_poly);
             assert_relative_eq!(generic_dist1, 1.0);
             assert_relative_eq!(generic_dist2, 1.0);
 
