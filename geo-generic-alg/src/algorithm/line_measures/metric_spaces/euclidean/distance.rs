@@ -401,31 +401,32 @@ pub trait DistanceExt<F: CoordFloat, Rhs = Self> {
 /// Follows the same pattern as impl_euclidean_distance_for_polygonlike_geometry!
 macro_rules! impl_distance_ext_for_polygonlike_geometry_trait {
     ($polygonlike_trait:ident, $polygonlike_tag:ident) => {
-        impl<F, P: $polygonlike_trait<T = F>> GenericDistanceTrait<F, $polygonlike_tag> for P
+        impl<F, P: $polygonlike_trait<T = F>>
+            GenericDistanceTrait<F, $polygonlike_tag, $polygonlike_tag, P> for P
         where
             F: GeoFloat,
         {
-            fn generic_distance_trait(&self, other: &Self) -> F {
+            fn generic_distance_trait(&self, rhs: &P) -> F {
                 let poly1 = self.to_polygon();
-                let poly2 = other.to_polygon();
+                let poly2 = rhs.to_polygon();
                 poly1.distance_ext(&poly2)
             }
         }
     };
 }
 
-/// Generic trait version of multi-geometry distance implementation  
+/// Generic trait version of multi-geometry distance implementation
 /// Follows the same pattern as impl_euclidean_distance_for_iter_geometry!
 macro_rules! impl_distance_ext_for_iter_geometry_trait {
     ($iter_trait:ident, $iter_tag:ident, $member_method:ident) => {
-        impl<F, I: $iter_trait<T = F>> GenericDistanceTrait<F, $iter_tag> for I
+        impl<F, I: $iter_trait<T = F>> GenericDistanceTrait<F, $iter_tag, $iter_tag, I> for I
         where
             F: GeoFloat,
         {
-            fn generic_distance_trait(&self, other: &Self) -> F {
+            fn generic_distance_trait(&self, rhs: &I) -> F {
                 let mut min_dist: F = Float::max_value();
                 for member1 in self.$member_method() {
-                    for member2 in other.$member_method() {
+                    for member2 in rhs.$member_method() {
                         let dist = member1.distance_ext(&member2);
                         min_dist = min_dist.min(dist);
                     }
@@ -440,27 +441,29 @@ macro_rules! impl_distance_ext_for_iter_geometry_trait {
     };
 }
 
-// Implementation of DistanceExt for same-type generic trait geometries using the type-tag pattern
-impl<F, G> DistanceExt<F> for G
+// Implementation of DistanceExt for cross-type generic trait geometries using the two type-tag pattern
+impl<F, LHS, RHS> DistanceExt<F, RHS> for LHS
 where
     F: GeoFloat,
-    G: GeoTraitExtWithTypeTag + GenericDistanceTrait<F, G::Tag>,
+    LHS: GeoTraitExtWithTypeTag,
+    RHS: GeoTraitExtWithTypeTag,
+    LHS: GenericDistanceTrait<F, LHS::Tag, RHS::Tag, RHS>,
 {
-    fn distance_ext(&self, other: &G) -> F {
+    fn distance_ext(&self, other: &RHS) -> F {
         self.generic_distance_trait(other)
     }
 }
 
 // ┌────────────────────────────────────────────────────────────┐
-// │ Internal trait for direct distance calculations            │
+// │ Internal trait for cross-type distance calculations       │
 // └────────────────────────────────────────────────────────────┘
 
-// Internal trait for direct distance calculations without conversion
-trait GenericDistanceTrait<F, GT: GeoTypeTag>
+// Internal trait for cross-type distance calculations without conversion
+trait GenericDistanceTrait<F, LhsTag: GeoTypeTag, RhsTag: GeoTypeTag, Rhs = Self>
 where
     F: GeoFloat,
 {
-    fn generic_distance_trait(&self, other: &Self) -> F;
+    fn generic_distance_trait(&self, rhs: &Rhs) -> F;
 }
 
 // ┌────────────────────────────────────────────────────────────┐
@@ -468,12 +471,34 @@ where
 // └────────────────────────────────────────────────────────────┘
 
 // Point-to-Point direct distance implementation
-impl<F, P: PointTraitExt<T = F>> GenericDistanceTrait<F, PointTag> for P
+impl<F, P: PointTraitExt<T = F>> GenericDistanceTrait<F, PointTag, PointTag, P> for P
 where
     F: GeoFloat,
 {
-    fn generic_distance_trait(&self, other: &Self) -> F {
-        point_distance_generic(self, other)
+    fn generic_distance_trait(&self, rhs: &P) -> F {
+        point_distance_generic(self, rhs)
+    }
+}
+
+// Point-to-LineString cross-type distance implementation
+impl<F, P: PointTraitExt<T = F>, LS: LineStringTraitExt<T = F>>
+    GenericDistanceTrait<F, PointTag, LineStringTag, LS> for P
+where
+    F: GeoFloat,
+{
+    fn generic_distance_trait(&self, rhs: &LS) -> F {
+        distance_point_to_linestring_generic(self, rhs)
+    }
+}
+
+// Point-to-Polygon cross-type distance implementation
+impl<F, P: PointTraitExt<T = F>, Poly: PolygonTraitExt<T = F>>
+    GenericDistanceTrait<F, PointTag, PolygonTag, Poly> for P
+where
+    F: GeoFloat,
+{
+    fn generic_distance_trait(&self, rhs: &Poly) -> F {
+        distance_point_to_polygon_generic(self, rhs)
     }
 }
 
@@ -482,14 +507,15 @@ where
 // └────────────────────────────────────────────────────────────┘
 
 // LineString-to-LineString direct distance implementation
-impl<F, LS: LineStringTraitExt<T = F>> GenericDistanceTrait<F, LineStringTag> for LS
+impl<F, LS: LineStringTraitExt<T = F>> GenericDistanceTrait<F, LineStringTag, LineStringTag, LS>
+    for LS
 where
     F: GeoFloat,
 {
-    fn generic_distance_trait(&self, other: &Self) -> F {
+    fn generic_distance_trait(&self, rhs: &LS) -> F {
         let mut min_dist: F = Float::max_value();
         for line1 in self.lines() {
-            for line2 in other.lines() {
+            for line2 in rhs.lines() {
                 // Line-to-line distance using endpoints
                 let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
                 let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
@@ -512,12 +538,12 @@ where
 // └────────────────────────────────────────────────────────────┘
 
 // Polygon-to-Polygon direct distance implementation
-impl<F, P: PolygonTraitExt<T = F>> GenericDistanceTrait<F, PolygonTag> for P
+impl<F, P: PolygonTraitExt<T = F>> GenericDistanceTrait<F, PolygonTag, PolygonTag, P> for P
 where
     F: GeoFloat,
 {
-    fn generic_distance_trait(&self, other: &Self) -> F {
-        if let (Some(ext1), Some(ext2)) = (self.exterior_ext(), other.exterior_ext()) {
+    fn generic_distance_trait(&self, rhs: &P) -> F {
+        if let (Some(ext1), Some(ext2)) = (self.exterior_ext(), rhs.exterior_ext()) {
             ext1.distance_ext(&ext2)
         } else {
             F::zero()
@@ -544,22 +570,23 @@ impl_distance_ext_for_iter_geometry_trait!(
 );
 impl_distance_ext_for_iter_geometry_trait!(MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
 // GeometryCollection needs custom implementation due to mixed geometry types
-impl<F, GC: GeometryCollectionTraitExt<T = F>> GenericDistanceTrait<F, GeometryCollectionTag> for GC
+impl<F, GC: GeometryCollectionTraitExt<T = F>>
+    GenericDistanceTrait<F, GeometryCollectionTag, GeometryCollectionTag, GC> for GC
 where
     F: GeoFloat,
 {
-    fn generic_distance_trait(&self, other: &Self) -> F {
+    fn generic_distance_trait(&self, rhs: &GC) -> F {
         // Convert to concrete GeometryCollection for using the proven concrete implementation
         let self_geometries: Vec<Geometry<F>> =
             self.geometries_ext().map(|g| g.to_geometry()).collect();
-        let other_geometries: Vec<Geometry<F>> =
-            other.geometries_ext().map(|g| g.to_geometry()).collect();
+        let rhs_geometries: Vec<Geometry<F>> =
+            rhs.geometries_ext().map(|g| g.to_geometry()).collect();
 
         let self_gc = GeometryCollection::new_from(self_geometries);
-        let other_gc = GeometryCollection::new_from(other_geometries);
+        let rhs_gc = GeometryCollection::new_from(rhs_geometries);
 
         // Use the concrete Distance trait implementation
-        Euclidean.distance(&self_gc, &other_gc)
+        Euclidean.distance(&self_gc, &rhs_gc)
     }
 }
 
@@ -568,14 +595,14 @@ where
 // └────────────────────────────────────────────────────────────┘
 
 // Generic trait distance implementation for Geometry dispatch.
-impl<F, G: GeometryTraitExt<T = F>> GenericDistanceTrait<F, GeometryTag> for G
+impl<F, G: GeometryTraitExt<T = F>> GenericDistanceTrait<F, GeometryTag, GeometryTag, G> for G
 where
     F: GeoFloat,
 {
-    fn generic_distance_trait(&self, other: &Self) -> F {
+    fn generic_distance_trait(&self, rhs: &G) -> F {
         use geo_traits_ext::GeometryTypeExt;
 
-        match (self.as_type_ext(), other.as_type_ext()) {
+        match (self.as_type_ext(), rhs.as_type_ext()) {
             // Same-type combinations
             (GeometryTypeExt::Point(p1), GeometryTypeExt::Point(p2)) => p1.distance_ext(p2),
             (GeometryTypeExt::LineString(ls1), GeometryTypeExt::LineString(ls2)) => {
