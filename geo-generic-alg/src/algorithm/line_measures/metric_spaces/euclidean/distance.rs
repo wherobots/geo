@@ -543,16 +543,45 @@ where
     }
 }
 
+// Point-to-Line distance implementation
+impl<F, P, L> GenericDistanceTrait<F, PointTag, LineTag, L> for P
+where
+    F: GeoFloat,
+    P: PointTraitExt<T = F>,
+    L: LineTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &L) -> F {
+        if let Some(coord) = self.coord_ext() {
+            line_segment_distance_generic(&coord, rhs)
+        } else {
+            F::zero()
+        }
+    }
+}
 
+// Point-to-LineString distance implementation
+impl<F, P, LS> GenericDistanceTrait<F, PointTag, LineStringTag, LS> for P
+where
+    F: GeoFloat,
+    P: PointTraitExt<T = F>,
+    LS: LineStringTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &LS) -> F {
+        distance_point_to_linestring_generic(self, rhs)
+    }
+}
 
-
-
-
-
-
-
-
-
+// Point-to-Polygon distance implementation
+impl<F, P, Poly> GenericDistanceTrait<F, PointTag, PolygonTag, Poly> for P
+where
+    F: GeoFloat,
+    P: PointTraitExt<T = F>,
+    Poly: PolygonTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &Poly) -> F {
+        distance_point_to_polygon_generic(self, rhs)
+    }
+}
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for LineString (generic traits)           │
