@@ -685,11 +685,7 @@ where
     F: GeoFloat,
 {
     fn generic_distance_trait(&self, rhs: &P) -> F {
-        if let (Some(ext1), Some(ext2)) = (self.exterior_ext(), rhs.exterior_ext()) {
-            ext1.distance_ext(&ext2)
-        } else {
-            F::zero()
-        }
+        distance_polygon_to_polygon_generic(self, rhs)
     }
 }
 
@@ -702,9 +698,6 @@ symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineTr
 
 // Polygon-to-LineString (symmetric to LineString-to-Polygon)
 symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineStringTraitExt, LineStringTag);
-
-// Cross-type support is provided via the GeometryTag implementation below
-// The utility function approach is more practical for Rust's type system constraints
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Rect and Triangle (generic traits)     │
