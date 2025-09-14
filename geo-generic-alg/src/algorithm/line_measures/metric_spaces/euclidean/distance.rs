@@ -384,6 +384,8 @@ impl<F: GeoFloat> Distance<F, &Geometry<F>, &Geometry<F>> for Euclidean {
 // └──────────────────────────────────────────────────────────┘
 
 use geo_traits_ext::*;
+use geo_types::CoordNum;
+use crate::intersects::IntersectsTrait;
 
 /// Extension trait for generic geometry types to calculate distances directly
 /// using Euclidean metric space without conversion overhead
@@ -465,9 +467,70 @@ where
 {
     fn generic_distance_trait(&self, rhs: &Rhs) -> F;
 }
+macro_rules! symmetric_distance_ext_trait_impl {
+    ($num_type:ident, $lhs_type:ident, $lhs_tag:ident, $rhs_type:ident, $rhs_tag:ident) => {
+        impl<F, LHS, RHS> GenericDistanceTrait<F, $lhs_tag, $rhs_tag, RHS> for LHS
+        where
+            F: $num_type,
+            LHS: $lhs_type<T = F>,
+            RHS: $rhs_type<T = F>,
+        {
+            fn generic_distance_trait(&self, rhs: &RHS) -> F {
+                rhs.generic_distance_trait(self)
+            }
+        }
+    };
+}
 
 // ┌────────────────────────────────────────────────────────────┐
-// │ Implementations for Point (generic traits)                │
+// │ Implementations for Coord  (generic traits)                │
+// └────────────────────────────────────────────────────────────┘
+
+// Coord-to-Coord direct distance implementation
+impl<F, LHS, RHS> GenericDistanceTrait<F, CoordTag, CoordTag, RHS> for LHS
+where
+    F: GeoFloat,
+    LHS: CoordTraitExt<T = F>,
+    RHS: CoordTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &RHS) -> F {
+        let delta = self.geo_coord() - rhs.geo_coord();
+        delta.x.hypot(delta.y)
+    }
+}
+
+// Coord-to-Point distance implementation
+// The other side (Point-to-Coord) is handled via a symmetric impl or blanket impl
+impl<F, LHS, RHS> GenericDistanceTrait<F, CoordTag, PointTag, RHS> for LHS
+where
+    F: GeoFloat,
+    LHS: CoordTraitExt<T = F>,
+    RHS: PointTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &RHS) -> F {
+        if let Some(rhs_coord) = rhs.coord_ext() {
+            let delta = self.geo_coord() - rhs_coord.geo_coord();
+            delta.x.hypot(delta.y)
+        } else {
+            F::zero()
+        }
+    }
+}
+
+// Coord-to-Line distance implementation
+impl<F, LHS, RHS> GenericDistanceTrait<F, CoordTag, LineTag, RHS> for LHS
+where
+    F: GeoFloat,
+    LHS: CoordTraitExt<T = F>,
+    RHS: LineTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &RHS) -> F {
+        line_segment_distance_generic(self, rhs)
+    }
+}
+
+// ┌────────────────────────────────────────────────────────────┐
+// │ Implementations for Point (generic traits)                 │
 // └────────────────────────────────────────────────────────────┘
 
 // Point-to-Point direct distance implementation
@@ -480,7 +543,16 @@ where
     }
 }
 
-// Cross-type implementations will be handled by GeometryTraitExt associated types
+
+
+
+
+
+
+
+
+
+
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for LineString (generic traits)           │
