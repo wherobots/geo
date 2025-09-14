@@ -826,115 +826,108 @@ where
                 line1.distance_ext(line2)
             }
 
-            // Cross-type combinations using utility functions (most practical for Rust's type system)
+            // Cross-type combinations using distance_ext
             (GeometryTypeExt::Point(p), GeometryTypeExt::LineString(ls)) => {
-                distance_point_to_linestring_generic(p, ls)
+                p.distance_ext(ls)
             }
             (GeometryTypeExt::LineString(ls), GeometryTypeExt::Point(p)) => {
-                distance_linestring_to_point_generic(ls, p)
+                ls.distance_ext(p)
             }
             (GeometryTypeExt::Point(p), GeometryTypeExt::Polygon(poly)) => {
-                distance_point_to_polygon_generic(p, poly)
+                p.distance_ext(poly)
             }
             (GeometryTypeExt::Polygon(poly), GeometryTypeExt::Point(p)) => {
-                distance_polygon_to_point_generic(poly, p)
+                poly.distance_ext(p)
             }
             (GeometryTypeExt::LineString(ls), GeometryTypeExt::Polygon(poly)) => {
-                distance_linestring_to_polygon_generic(ls, poly)
+                ls.distance_ext(poly)
             }
             (GeometryTypeExt::Polygon(poly), GeometryTypeExt::LineString(ls)) => {
-                distance_polygon_to_linestring_generic(poly, ls)
+                poly.distance_ext(ls)
             }
             (GeometryTypeExt::Point(p), GeometryTypeExt::Line(line)) => {
-                if let Some(coord) = p.coord_ext() {
-                    line_segment_distance_generic(&coord, line)
-                } else {
-                    F::zero()
-                }
+                p.distance_ext(line)
             }
             (GeometryTypeExt::Line(line), GeometryTypeExt::Point(p)) => {
-                if let Some(coord) = p.coord_ext() {
-                    line_segment_distance_generic(&coord, line)
-                } else {
-                    F::zero()
-                }
+                line.distance_ext(p)
             }
             (GeometryTypeExt::LineString(ls), GeometryTypeExt::Line(line)) => {
-                distance_linestring_to_line_generic(ls, line)
+                ls.distance_ext(line)
             }
             (GeometryTypeExt::Line(line), GeometryTypeExt::LineString(ls)) => {
-                distance_linestring_to_line_generic(ls, line)
+                line.distance_ext(ls)
             }
             (GeometryTypeExt::Polygon(poly), GeometryTypeExt::Line(line)) => {
-                distance_line_to_polygon_generic(line, poly)
+                poly.distance_ext(line)
             }
             (GeometryTypeExt::Line(line), GeometryTypeExt::Polygon(poly)) => {
-                distance_line_to_polygon_generic(line, poly)
+                line.distance_ext(poly)
             }
 
             // Cross-type combinations with Rect
             (GeometryTypeExt::Point(p), GeometryTypeExt::Rect(rect)) => {
-                let poly = rect.to_polygon();
-                distance_point_to_polygon_generic(p, &poly)
+                p.distance_ext(rect)
             }
             (GeometryTypeExt::Rect(rect), GeometryTypeExt::Point(p)) => {
-                let poly = rect.to_polygon();
-                distance_polygon_to_point_generic(&poly, p)
+                rect.distance_ext(p)
             }
             (GeometryTypeExt::LineString(ls), GeometryTypeExt::Rect(rect)) => {
-                let poly = rect.to_polygon();
-                distance_linestring_to_polygon_generic(ls, &poly)
+                ls.distance_ext(rect)
             }
             (GeometryTypeExt::Rect(rect), GeometryTypeExt::LineString(ls)) => {
-                let poly = rect.to_polygon();
-                distance_polygon_to_linestring_generic(&poly, ls)
+                rect.distance_ext(ls)
             }
             (GeometryTypeExt::Polygon(poly), GeometryTypeExt::Rect(rect)) => {
-                let rect_poly = rect.to_polygon();
-                distance_polygon_to_polygon_generic(poly, &rect_poly)
+                poly.distance_ext(rect)
             }
             (GeometryTypeExt::Rect(rect), GeometryTypeExt::Polygon(poly)) => {
-                let rect_poly = rect.to_polygon();
-                distance_polygon_to_polygon_generic(&rect_poly, poly)
+                rect.distance_ext(poly)
             }
 
             // Cross-type combinations with Triangle
             (GeometryTypeExt::Point(p), GeometryTypeExt::Triangle(tri)) => {
-                let poly = tri.to_polygon();
-                distance_point_to_polygon_generic(p, &poly)
+                p.distance_ext(tri)
             }
             (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Point(p)) => {
-                let poly = tri.to_polygon();
-                distance_polygon_to_point_generic(&poly, p)
+                tri.distance_ext(p)
             }
             (GeometryTypeExt::LineString(ls), GeometryTypeExt::Triangle(tri)) => {
-                let poly = tri.to_polygon();
-                distance_linestring_to_polygon_generic(ls, &poly)
+                ls.distance_ext(tri)
             }
             (GeometryTypeExt::Triangle(tri), GeometryTypeExt::LineString(ls)) => {
-                let poly = tri.to_polygon();
-                distance_polygon_to_linestring_generic(&poly, ls)
+                tri.distance_ext(ls)
             }
             (GeometryTypeExt::Polygon(poly), GeometryTypeExt::Triangle(tri)) => {
-                let tri_poly = tri.to_polygon();
-                distance_polygon_to_polygon_generic(poly, &tri_poly)
+                poly.distance_ext(tri)
             }
             (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Polygon(poly)) => {
-                let tri_poly = tri.to_polygon();
-                distance_polygon_to_polygon_generic(&tri_poly, poly)
+                tri.distance_ext(poly)
             }
 
             // Cross-type combinations Rect-Triangle
             (GeometryTypeExt::Rect(rect), GeometryTypeExt::Triangle(tri)) => {
-                let rect_poly = rect.to_polygon();
-                let tri_poly = tri.to_polygon();
-                distance_polygon_to_polygon_generic(&rect_poly, &tri_poly)
+                rect.distance_ext(tri)
             }
             (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Rect(rect)) => {
-                let tri_poly = tri.to_polygon();
-                let rect_poly = rect.to_polygon();
-                distance_polygon_to_polygon_generic(&tri_poly, &rect_poly)
+                tri.distance_ext(rect)
             }
+
+            // Cross-type combinations with Line for Rect and Triangle
+            (GeometryTypeExt::Line(line), GeometryTypeExt::Rect(rect)) => {
+                line.distance_ext(rect)
+            }
+            (GeometryTypeExt::Rect(rect), GeometryTypeExt::Line(line)) => {
+                rect.distance_ext(line)
+            }
+            (GeometryTypeExt::Line(line), GeometryTypeExt::Triangle(tri)) => {
+                line.distance_ext(tri)
+            }
+            (GeometryTypeExt::Triangle(tri), GeometryTypeExt::Line(line)) => {
+                tri.distance_ext(line)
+            }
+
+            // Multi-geometry and GeometryCollection combinations fall through to concrete conversion
+            // due to trait bound complexity with associated types
 
             // For all other combinations, convert to concrete geometry and use Euclidean implementation
             _ => {
