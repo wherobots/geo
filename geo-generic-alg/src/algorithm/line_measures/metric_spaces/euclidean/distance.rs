@@ -964,16 +964,16 @@ macro_rules! impl_generic_distance_for_geometry_and_variant_new {
                 fn generic_distance_trait(&self, rhs: &RHS) -> F {
                     use geo_traits_ext::GeometryTypeExt;
                     match rhs.as_type_ext() {
-                        GeometryTypeExt::Point(point) => self.distance_ext(&point),
-                        GeometryTypeExt::Line(line) => self.distance_ext(&line),
-                        GeometryTypeExt::LineString(line_string) => self.distance_ext(&line_string),
-                        GeometryTypeExt::Polygon(polygon) => self.distance_ext(&polygon),
-                        GeometryTypeExt::MultiPoint(multi_point) => self.distance_ext(&multi_point),
-                        GeometryTypeExt::MultiLineString(multi_line_string) => self.distance_ext(&multi_line_string),
-                        GeometryTypeExt::MultiPolygon(multi_polygon) => self.distance_ext(&multi_polygon),
-                        GeometryTypeExt::GeometryCollection(geometry_collection) => self.distance_ext(&geometry_collection),
-                        GeometryTypeExt::Rect(rect) => self.distance_ext(&rect),
-                        GeometryTypeExt::Triangle(triangle) => self.distance_ext(&triangle),
+                        GeometryTypeExt::Point(point) => self.generic_distance_trait(&point),
+                        GeometryTypeExt::Line(line) => self.generic_distance_trait(&line),
+                        GeometryTypeExt::LineString(line_string) => self.generic_distance_trait(&line_string),
+                        GeometryTypeExt::Polygon(polygon) => self.generic_distance_trait(&polygon),
+                        GeometryTypeExt::MultiPoint(multi_point) => self.generic_distance_trait(&multi_point),
+                        GeometryTypeExt::MultiLineString(multi_line_string) => self.generic_distance_trait(&multi_line_string),
+                        GeometryTypeExt::MultiPolygon(multi_polygon) => self.generic_distance_trait(&multi_polygon),
+                        GeometryTypeExt::GeometryCollection(geometry_collection) => self.generic_distance_trait(&geometry_collection),
+                        GeometryTypeExt::Rect(rect) => self.generic_distance_trait(&rect),
+                        GeometryTypeExt::Triangle(triangle) => self.generic_distance_trait(&triangle),
                     }
                 }
             }
@@ -981,18 +981,6 @@ macro_rules! impl_generic_distance_for_geometry_and_variant_new {
     };
 }
 
-// This would be the cleaner approach, but we need the cross-type implementations first
-// impl_generic_distance_for_geometry_and_variant_new!([
-//     PointTraitExt, PointTag,
-//     LineTraitExt, LineTag,
-//     LineStringTraitExt, LineStringTag,
-//     PolygonTraitExt, PolygonTag,
-//     MultiPointTraitExt, MultiPointTag,
-//     MultiLineStringTraitExt, MultiLineStringTag,
-//     MultiPolygonTraitExt, MultiPolygonTag,
-//     TriangleTraitExt, TriangleTag,
-//     RectTraitExt, RectTag
-// ]);
 
 #[cfg(test)]
 mod tests {
