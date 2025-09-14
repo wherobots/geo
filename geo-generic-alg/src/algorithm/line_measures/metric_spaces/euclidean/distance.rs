@@ -834,11 +834,7 @@ symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, RectTr
 // └────────────────────────────────────────────────────────────┘
 
 impl_distance_ext_for_iter_geometry_trait!(MultiPointTraitExt, MultiPointTag, points_ext);
-impl_distance_ext_for_iter_geometry_trait!(
-    MultiLineStringTraitExt,
-    MultiLineStringTag,
-    line_strings_ext
-);
+impl_distance_ext_for_iter_geometry_trait!(MultiLineStringTraitExt, MultiLineStringTag, line_strings_ext);
 impl_distance_ext_for_iter_geometry_trait!(MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
 
 // ┌────────────────────────────────────────────────────────────┐
