@@ -41,6 +41,22 @@ macro_rules! symmetric_distance_impl {
     };
 }
 
+// Symmetric implementation for generic distance traits
+macro_rules! symmetric_generic_distance_impl {
+    ($num_type:ident, $lhs_type:ident, $lhs_tag:ident, $rhs_type:ident, $rhs_tag:ident) => {
+        impl<F, LHS, RHS> GenericDistanceTrait<F, $lhs_tag, $rhs_tag, RHS> for LHS
+        where
+            F: $num_type,
+            LHS: $lhs_type<T = F>,
+            RHS: $rhs_type<T = F>,
+        {
+            fn generic_distance_trait(&self, rhs: &RHS) -> F {
+                rhs.generic_distance_trait(self)
+            }
+        }
+    };
+}
+
 // ┌───────────────────────────┐
 // │ Implementations for Coord │
 // └───────────────────────────┘
@@ -501,6 +517,10 @@ where
     }
 }
 
+// Add symmetric implementations for Point cross-types
+symmetric_generic_distance_impl!(GeoFloat, LineStringTraitExt, LineStringTag, PointTraitExt, PointTag);
+symmetric_generic_distance_impl!(GeoFloat, PolygonTraitExt, PolygonTag, PointTraitExt, PointTag);
+
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for LineString (generic traits)           │
 // └────────────────────────────────────────────────────────────┘
@@ -531,6 +551,20 @@ where
         }
     }
 }
+
+// LineString-to-Polygon cross-type distance implementation
+impl<F, LS: LineStringTraitExt<T = F>, P: PolygonTraitExt<T = F>>
+    GenericDistanceTrait<F, LineStringTag, PolygonTag, P> for LS
+where
+    F: GeoFloat,
+{
+    fn generic_distance_trait(&self, rhs: &P) -> F {
+        distance_linestring_to_polygon_generic(self, rhs)
+    }
+}
+
+// Add symmetric implementation for LineString-Polygon
+symmetric_generic_distance_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineStringTraitExt, LineStringTag);
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Polygon (generic traits)              │
@@ -600,6 +634,11 @@ where
         distance_line_to_polygon_generic(self, rhs)
     }
 }
+
+// Add symmetric implementations for Line cross-types
+symmetric_generic_distance_impl!(GeoFloat, PointTraitExt, PointTag, LineTraitExt, LineTag);
+symmetric_generic_distance_impl!(GeoFloat, LineStringTraitExt, LineStringTag, LineTraitExt, LineTag);
+symmetric_generic_distance_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineTraitExt, LineTag);
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Rect and Triangle (generic traits)     │
