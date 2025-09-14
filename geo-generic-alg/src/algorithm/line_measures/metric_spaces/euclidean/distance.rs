@@ -41,21 +41,6 @@ macro_rules! symmetric_distance_impl {
     };
 }
 
-// Symmetric implementation for generic distance traits
-macro_rules! symmetric_generic_distance_impl {
-    ($num_type:ident, $lhs_type:ident, $lhs_tag:ident, $rhs_type:ident, $rhs_tag:ident) => {
-        impl<F, LHS, RHS> GenericDistanceTrait<F, $lhs_tag, $rhs_tag, RHS> for LHS
-        where
-            F: $num_type,
-            LHS: $lhs_type<T = F>,
-            RHS: $rhs_type<T = F>,
-        {
-            fn generic_distance_trait(&self, rhs: &RHS) -> F {
-                rhs.generic_distance_trait(self)
-            }
-        }
-    };
-}
 
 // ┌───────────────────────────┐
 // │ Implementations for Coord │
@@ -495,31 +480,7 @@ where
     }
 }
 
-// Point-to-LineString cross-type distance implementation
-impl<F, P: PointTraitExt<T = F>, LS: LineStringTraitExt<T = F>>
-    GenericDistanceTrait<F, PointTag, LineStringTag, LS> for P
-where
-    F: GeoFloat,
-{
-    fn generic_distance_trait(&self, rhs: &LS) -> F {
-        distance_point_to_linestring_generic(self, rhs)
-    }
-}
-
-// Point-to-Polygon cross-type distance implementation
-impl<F, P: PointTraitExt<T = F>, Poly: PolygonTraitExt<T = F>>
-    GenericDistanceTrait<F, PointTag, PolygonTag, Poly> for P
-where
-    F: GeoFloat,
-{
-    fn generic_distance_trait(&self, rhs: &Poly) -> F {
-        distance_point_to_polygon_generic(self, rhs)
-    }
-}
-
-// Add symmetric implementations for Point cross-types
-symmetric_generic_distance_impl!(GeoFloat, LineStringTraitExt, LineStringTag, PointTraitExt, PointTag);
-symmetric_generic_distance_impl!(GeoFloat, PolygonTraitExt, PolygonTag, PointTraitExt, PointTag);
+// Cross-type implementations will be handled by GeometryTraitExt associated types
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for LineString (generic traits)           │
@@ -552,19 +513,7 @@ where
     }
 }
 
-// LineString-to-Polygon cross-type distance implementation
-impl<F, LS: LineStringTraitExt<T = F>, P: PolygonTraitExt<T = F>>
-    GenericDistanceTrait<F, LineStringTag, PolygonTag, P> for LS
-where
-    F: GeoFloat,
-{
-    fn generic_distance_trait(&self, rhs: &P) -> F {
-        distance_linestring_to_polygon_generic(self, rhs)
-    }
-}
-
-// Add symmetric implementation for LineString-Polygon
-symmetric_generic_distance_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineStringTraitExt, LineStringTag);
+// Cross-type implementations will be handled by GeometryTraitExt associated types
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Polygon (generic traits)              │
@@ -598,47 +547,8 @@ where
     }
 }
 
-// Line-to-Point cross-type distance implementation
-impl<F, L: LineTraitExt<T = F>, P: PointTraitExt<T = F>>
-    GenericDistanceTrait<F, LineTag, PointTag, P> for L
-where
-    F: GeoFloat,
-{
-    fn generic_distance_trait(&self, rhs: &P) -> F {
-        if let Some(coord) = rhs.coord() {
-            line_segment_distance_generic(&coord, self)
-        } else {
-            F::zero()
-        }
-    }
-}
-
-// Line-to-LineString cross-type distance implementation
-impl<F, L: LineTraitExt<T = F>, LS: LineStringTraitExt<T = F>>
-    GenericDistanceTrait<F, LineTag, LineStringTag, LS> for L
-where
-    F: GeoFloat,
-{
-    fn generic_distance_trait(&self, rhs: &LS) -> F {
-        distance_linestring_to_line_generic(rhs, self)
-    }
-}
-
-// Line-to-Polygon cross-type distance implementation
-impl<F, L: LineTraitExt<T = F>, P: PolygonTraitExt<T = F>>
-    GenericDistanceTrait<F, LineTag, PolygonTag, P> for L
-where
-    F: GeoFloat,
-{
-    fn generic_distance_trait(&self, rhs: &P) -> F {
-        distance_line_to_polygon_generic(self, rhs)
-    }
-}
-
-// Add symmetric implementations for Line cross-types
-symmetric_generic_distance_impl!(GeoFloat, PointTraitExt, PointTag, LineTraitExt, LineTag);
-symmetric_generic_distance_impl!(GeoFloat, LineStringTraitExt, LineStringTag, LineTraitExt, LineTag);
-symmetric_generic_distance_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineTraitExt, LineTag);
+// Cross-type support is provided via the GeometryTag implementation below
+// The utility function approach is more practical for Rust's type system constraints
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Rect and Triangle (generic traits)     │
@@ -699,7 +609,7 @@ where
                 line1.distance_ext(line2)
             }
 
-            // Cross-type combinations using helper functions
+            // Cross-type combinations using utility functions (most practical for Rust's type system)
             (GeometryTypeExt::Point(p), GeometryTypeExt::LineString(ls)) => {
                 distance_point_to_linestring_generic(p, ls)
             }
@@ -717,6 +627,32 @@ where
             }
             (GeometryTypeExt::Polygon(poly), GeometryTypeExt::LineString(ls)) => {
                 distance_polygon_to_linestring_generic(poly, ls)
+            }
+            (GeometryTypeExt::Point(p), GeometryTypeExt::Line(line)) => {
+                if let Some(coord) = p.coord_ext() {
+                    line_segment_distance_generic(&coord, line)
+                } else {
+                    F::zero()
+                }
+            }
+            (GeometryTypeExt::Line(line), GeometryTypeExt::Point(p)) => {
+                if let Some(coord) = p.coord_ext() {
+                    line_segment_distance_generic(&coord, line)
+                } else {
+                    F::zero()
+                }
+            }
+            (GeometryTypeExt::LineString(ls), GeometryTypeExt::Line(line)) => {
+                distance_linestring_to_line_generic(ls, line)
+            }
+            (GeometryTypeExt::Line(line), GeometryTypeExt::LineString(ls)) => {
+                distance_linestring_to_line_generic(ls, line)
+            }
+            (GeometryTypeExt::Polygon(poly), GeometryTypeExt::Line(line)) => {
+                distance_line_to_polygon_generic(line, poly)
+            }
+            (GeometryTypeExt::Line(line), GeometryTypeExt::Polygon(poly)) => {
+                distance_line_to_polygon_generic(line, poly)
             }
 
             // Cross-type combinations with Rect
@@ -792,6 +728,54 @@ where
         }
     }
 }
+
+// ┌────────────────────────────────────────────────────────────┐
+// │ Improved Implementation Following Concrete Pattern         │
+// └────────────────────────────────────────────────────────────┘
+
+/// Generic trait distance implementation for every specific geometry type to GeometryTraitExt<T>.
+/// Follows the same elegant pattern as the concrete impl_euclidean_distance_for_geometry_and_variant! macro.
+macro_rules! impl_generic_distance_for_geometry_and_variant_new {
+    ([$($target_trait:ident, $target_tag:ident),*]) => {
+        $(
+            impl<F, LHS, RHS> GenericDistanceTrait<F, $target_tag, GeometryTag, RHS> for LHS
+            where
+                F: GeoFloat,
+                LHS: $target_trait<T = F>,
+                RHS: GeometryTraitExt<T = F>,
+            {
+                fn generic_distance_trait(&self, rhs: &RHS) -> F {
+                    use geo_traits_ext::GeometryTypeExt;
+                    match rhs.as_type_ext() {
+                        GeometryTypeExt::Point(point) => self.distance_ext(&point),
+                        GeometryTypeExt::Line(line) => self.distance_ext(&line),
+                        GeometryTypeExt::LineString(line_string) => self.distance_ext(&line_string),
+                        GeometryTypeExt::Polygon(polygon) => self.distance_ext(&polygon),
+                        GeometryTypeExt::MultiPoint(multi_point) => self.distance_ext(&multi_point),
+                        GeometryTypeExt::MultiLineString(multi_line_string) => self.distance_ext(&multi_line_string),
+                        GeometryTypeExt::MultiPolygon(multi_polygon) => self.distance_ext(&multi_polygon),
+                        GeometryTypeExt::GeometryCollection(geometry_collection) => self.distance_ext(&geometry_collection),
+                        GeometryTypeExt::Rect(rect) => self.distance_ext(&rect),
+                        GeometryTypeExt::Triangle(triangle) => self.distance_ext(&triangle),
+                    }
+                }
+            }
+        )*
+    };
+}
+
+// This would be the cleaner approach, but we need the cross-type implementations first
+// impl_generic_distance_for_geometry_and_variant_new!([
+//     PointTraitExt, PointTag,
+//     LineTraitExt, LineTag,
+//     LineStringTraitExt, LineStringTag,
+//     PolygonTraitExt, PolygonTag,
+//     MultiPointTraitExt, MultiPointTag,
+//     MultiLineStringTraitExt, MultiLineStringTag,
+//     MultiPolygonTraitExt, MultiPolygonTag,
+//     TriangleTraitExt, TriangleTag,
+//     RectTraitExt, RectTag
+// ]);
 
 #[cfg(test)]
 mod tests {
