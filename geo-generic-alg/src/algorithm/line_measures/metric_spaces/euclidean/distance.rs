@@ -399,7 +399,8 @@ pub trait DistanceExt<F: CoordFloat, Rhs = Self> {
 /// Generic trait version of polygon-like geometry distance implementation
 /// Follows the same pattern as impl_euclidean_distance_for_polygonlike_geometry!
 macro_rules! impl_distance_ext_for_polygonlike_geometry_trait {
-    ($polygonlike_trait:ident, $polygonlike_tag:ident) => {
+    ($polygonlike_trait:ident, $polygonlike_tag:ident, [$(($geometry_trait:ident, $geometry_tag:ident)),*]) => {
+        // Self-to-self distance implementation
         impl<F, P: $polygonlike_trait<T = F>>
             GenericDistanceTrait<F, $polygonlike_tag, $polygonlike_tag, P> for P
         where
@@ -408,8 +409,50 @@ macro_rules! impl_distance_ext_for_polygonlike_geometry_trait {
             fn generic_distance_trait(&self, rhs: &P) -> F {
                 let poly1 = self.to_polygon();
                 let poly2 = rhs.to_polygon();
-                poly1.distance_ext(&poly2)
+                distance_polygon_to_polygon_generic(&poly1, &poly2)
             }
+        }
+    };
+}
+
+// Separate macro to generate individual implementations for each geometry type
+macro_rules! impl_polygonlike_to_geometry_distance {
+    ($polygonlike_trait:ident, $polygonlike_tag:ident, $geometry_trait:ident, $geometry_tag:ident) => {
+        impl<F, PL, G> GenericDistanceTrait<F, $polygonlike_tag, $geometry_tag, G> for PL
+        where
+            F: GeoFloat,
+            PL: $polygonlike_trait<T = F>,
+            G: $geometry_trait<T = F>,
+        {
+            fn generic_distance_trait(&self, rhs: &G) -> F {
+                let poly = self.to_polygon();
+                impl_polygonlike_to_geometry_distance!(@call_distance poly, rhs, $geometry_tag)
+            }
+        }
+    };
+
+    (@call_distance $poly:expr, $rhs:expr, PointTag) => {
+        distance_point_to_polygon_generic($rhs, &$poly)
+    };
+    (@call_distance $poly:expr, $rhs:expr, LineTag) => {
+        distance_line_to_polygon_generic($rhs, &$poly)
+    };
+    (@call_distance $poly:expr, $rhs:expr, LineStringTag) => {
+        distance_linestring_to_polygon_generic($rhs, &$poly)
+    };
+    (@call_distance $poly:expr, $rhs:expr, PolygonTag) => {
+        distance_polygon_to_polygon_generic(&$poly, $rhs)
+    };
+    (@call_distance $poly:expr, $rhs:expr, RectTag) => {
+        {
+            let poly2 = $rhs.to_polygon();
+            distance_polygon_to_polygon_generic(&$poly, &poly2)
+        }
+    };
+    (@call_distance $poly:expr, $rhs:expr, TriangleTag) => {
+        {
+            let poly2 = $rhs.to_polygon();
+            distance_polygon_to_polygon_generic(&$poly, &poly2)
         }
     };
 }
@@ -703,8 +746,33 @@ symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineSt
 // │ Implementations for Rect and Triangle (generic traits)     │
 // └────────────────────────────────────────────────────────────┘
 
-impl_distance_ext_for_polygonlike_geometry_trait!(TriangleTraitExt, TriangleTag);
-impl_distance_ext_for_polygonlike_geometry_trait!(RectTraitExt, RectTag);
+// Triangle implementations
+impl_distance_ext_for_polygonlike_geometry_trait!(TriangleTraitExt, TriangleTag, []);
+impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, PointTraitExt, PointTag);
+impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, LineTraitExt, LineTag);
+impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, LineStringTraitExt, LineStringTag);
+impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, PolygonTraitExt, PolygonTag);
+impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, RectTraitExt, RectTag);
+
+// Symmetric implementations for Triangle
+symmetric_distance_ext_trait_impl!(GeoFloat, PointTraitExt, PointTag, TriangleTraitExt, TriangleTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, LineTraitExt, LineTag, TriangleTraitExt, TriangleTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, LineStringTraitExt, LineStringTag, TriangleTraitExt, TriangleTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, TriangleTraitExt, TriangleTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, RectTraitExt, RectTag, TriangleTraitExt, TriangleTag);
+
+// Rect implementations
+impl_distance_ext_for_polygonlike_geometry_trait!(RectTraitExt, RectTag, []);
+impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, PointTraitExt, PointTag);
+impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, LineTraitExt, LineTag);
+impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, LineStringTraitExt, LineStringTag);
+impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, PolygonTraitExt, PolygonTag);
+
+// Symmetric implementations for Rect (excluding Triangle which is already handled above)
+symmetric_distance_ext_trait_impl!(GeoFloat, PointTraitExt, PointTag, RectTraitExt, RectTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, LineTraitExt, LineTag, RectTraitExt, RectTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, LineStringTraitExt, LineStringTag, RectTraitExt, RectTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, RectTraitExt, RectTag);
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for multi-geometry types (generic traits)  │
