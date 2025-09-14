@@ -619,26 +619,6 @@ impl_distance_ext_for_iter_geometry_trait!(
     line_strings_ext
 );
 impl_distance_ext_for_iter_geometry_trait!(MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
-// GeometryCollection needs custom implementation due to mixed geometry types
-impl<F, GC: GeometryCollectionTraitExt<T = F>>
-    GenericDistanceTrait<F, GeometryCollectionTag, GeometryCollectionTag, GC> for GC
-where
-    F: GeoFloat,
-{
-    fn generic_distance_trait(&self, rhs: &GC) -> F {
-        // Convert to concrete GeometryCollection for using the proven concrete implementation
-        let self_geometries: Vec<Geometry<F>> =
-            self.geometries_ext().map(|g| g.to_geometry()).collect();
-        let rhs_geometries: Vec<Geometry<F>> =
-            rhs.geometries_ext().map(|g| g.to_geometry()).collect();
-
-        let self_gc = GeometryCollection::new_from(self_geometries);
-        let rhs_gc = GeometryCollection::new_from(rhs_geometries);
-
-        // Use the concrete Distance trait implementation
-        Euclidean.distance(&self_gc, &rhs_gc)
-    }
-}
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementation for Geometry (generic traits)               │
@@ -679,10 +659,6 @@ where
             (GeometryTypeExt::Line(line1), GeometryTypeExt::Line(line2)) => {
                 line1.distance_ext(line2)
             }
-            (
-                GeometryTypeExt::GeometryCollection(gc1),
-                GeometryTypeExt::GeometryCollection(gc2),
-            ) => gc1.distance_ext(gc2),
 
             // Cross-type combinations using helper functions
             (GeometryTypeExt::Point(p), GeometryTypeExt::LineString(ls)) => {
@@ -756,7 +732,7 @@ where
                 distance_polygon_to_polygon_generic(&tri_poly, poly)
             }
 
-            // Rect-Triangle cross combinations
+            // Cross-type combinations Rect-Triangle
             (GeometryTypeExt::Rect(rect), GeometryTypeExt::Triangle(tri)) => {
                 let rect_poly = rect.to_polygon();
                 let tri_poly = tri.to_polygon();
@@ -785,11 +761,7 @@ mod tests {
     use crate::{Line, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon};
     use geo_types::{coord, polygon, private_utils::line_segment_distance};
 
-    // ┌────────────────────────────────────────────────────────────────┐
-    // │ Tests for original Distance trait (concrete implementations)   │
-    // └────────────────────────────────────────────────────────────────┘
-
-    mod original_distance_tests {
+    mod distance_cross_validation_tests {
         use super::*;
 
         #[test]
@@ -1929,10 +1901,6 @@ mod tests {
             let test_gc = GeometryCollection(vec![Geometry::Rect(test_rect)]);
             let distance_gc_gc = Euclidean.distance(&test_gc, &gc);
             assert_relative_eq!(distance_gc_gc, 60.959002616512684);
-
-            // Cross-validation: GeometryCollection-to-GeometryCollection distance using generic implementations
-            let distance_gc_gc_generic = test_gc.distance_ext(&gc);
-            assert_relative_eq!(distance_gc_gc_generic, distance_gc_gc);
         }
     }
 }
