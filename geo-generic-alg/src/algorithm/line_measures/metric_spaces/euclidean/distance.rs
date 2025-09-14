@@ -693,6 +693,16 @@ where
     }
 }
 
+// Symmetric Polygon distance implementations
+// Polygon-to-Point (symmetric to Point-to-Polygon)
+symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, PointTraitExt, PointTag);
+
+// Polygon-to-Line (symmetric to Line-to-Polygon)
+symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineTraitExt, LineTag);
+
+// Polygon-to-LineString (symmetric to LineString-to-Polygon)
+symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineStringTraitExt, LineStringTag);
+
 // Cross-type support is provided via the GeometryTag implementation below
 // The utility function approach is more practical for Rust's type system constraints
 
