@@ -376,12 +376,8 @@ impl<F: GeoFloat> Distance<F, &Geometry<F>, &Geometry<F>> for Euclidean {
     }
 }
 
-// ┌───────────────────────────┐
-// │ Implementations utilities │
-// └───────────────────────────┘
-
 // ┌──────────────────────────────────────────────────────────┐
-// │ Generic Trait Distance Extension - Direct Implementation │
+// │ Generic Trait Distance Extension                         │
 // └──────────────────────────────────────────────────────────┘
 
 use geo_traits_ext::*;
@@ -397,7 +393,7 @@ pub trait DistanceExt<F: CoordFloat, Rhs = Self> {
 }
 
 // ┌──────────────────────────────────────────────────────────┐
-// │ Generic trait macro implementations (following original) │
+// │ Generic trait macro implementations                      │
 // └──────────────────────────────────────────────────────────┘
 
 /// Generic trait version of polygon-like geometry distance implementation
@@ -630,8 +626,15 @@ where
 }
 
 // ┌────────────────────────────────────────────────────────────┐
-// │ Implementations for LineString (generic traits)           │
+// │ Implementations for LineString (generic traits)            │
 // └────────────────────────────────────────────────────────────┘
+
+// Symmetric LineString distance implementations
+// LineString-to-Point (symmetric to Point-to-LineString)
+symmetric_distance_ext_trait_impl!(GeoFloat, LineStringTraitExt, LineStringTag, PointTraitExt, PointTag);
+
+// LineString-to-Line (symmetric to Line-to-LineString)
+symmetric_distance_ext_trait_impl!(GeoFloat, LineStringTraitExt, LineStringTag, LineTraitExt, LineTag);
 
 // LineString-to-LineString direct distance implementation
 impl<F, LS: LineStringTraitExt<T = F>> GenericDistanceTrait<F, LineStringTag, LineStringTag, LS>
@@ -660,7 +663,17 @@ where
     }
 }
 
-// Cross-type implementations will be handled by GeometryTraitExt associated types
+// LineString-to-Polygon distance implementation
+impl<F, LS, Poly> GenericDistanceTrait<F, LineStringTag, PolygonTag, Poly> for LS
+where
+    F: GeoFloat,
+    LS: LineStringTraitExt<T = F>,
+    Poly: PolygonTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &Poly) -> F {
+        distance_linestring_to_polygon_generic(self, rhs)
+    }
+}
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Polygon (generic traits)              │
