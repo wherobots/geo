@@ -1121,9 +1121,7 @@ macro_rules! impl_distance_geometry_collection_from_geometry {
                 use num_traits::Bounded;
 
                 self.geometries_ext()
-                    .map(|geom| {
-                        geom.distance_ext(rhs)
-                    })
+                    .map(|geom| geom.distance_ext(rhs))
                     .fold(Bounded::max_value(), |acc, dist| acc.min(dist))
             }
         }
