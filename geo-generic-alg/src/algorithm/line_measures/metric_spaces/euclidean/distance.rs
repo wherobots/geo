@@ -516,6 +516,31 @@ macro_rules! impl_distance_ext_for_iter_geometry_trait {
     };
 }
 
+/// Macro for implementing cross-type distance calculations from single geometry to multi-geometry types
+macro_rules! impl_single_to_multi_geometry_distance {
+    ($single_trait:ident, $single_tag:ident, $multi_trait:ident, $multi_tag:ident, $member_method:ident) => {
+        impl<F, S, M> GenericDistanceTrait<F, $single_tag, $multi_tag, M> for S
+        where
+            F: GeoFloat,
+            S: $single_trait<T = F>,
+            M: $multi_trait<T = F>,
+        {
+            fn generic_distance_trait(&self, rhs: &M) -> F {
+                let mut min_dist: F = Bounded::max_value();
+                for member in rhs.$member_method() {
+                    let dist = self.distance_ext(&member);
+                    min_dist = min_dist.min(dist);
+                }
+                if min_dist == Bounded::max_value() {
+                    F::zero()
+                } else {
+                    min_dist
+                }
+            }
+        }
+    };
+}
+
 // Implementation of DistanceExt for cross-type generic trait geometries using the two type-tag pattern
 impl<F, LHS, RHS> DistanceExt<F, RHS> for LHS
 where
@@ -681,47 +706,6 @@ where
     }
 }
 
-// Point to MultiLineString distance implementation
-impl<F, P, MLS> GenericDistanceTrait<F, PointTag, MultiLineStringTag, MLS> for P
-where
-    F: GeoFloat,
-    P: PointTraitExt<T = F>,
-    MLS: MultiLineStringTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MLS) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for linestring in rhs.line_strings_ext() {
-            let dist = self.distance_ext(&linestring);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
-
-// Point to MultiPolygon distance implementation
-impl<F, P, MPoly> GenericDistanceTrait<F, PointTag, MultiPolygonTag, MPoly> for P
-where
-    F: GeoFloat,
-    P: PointTraitExt<T = F>,
-    MPoly: MultiPolygonTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MPoly) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for polygon in rhs.polygons_ext() {
-            let dist = self.distance_ext(&polygon);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Line (generic traits)                  │
@@ -765,68 +749,6 @@ where
     }
 }
 
-// Line to MultiPoint distance implementation
-impl<F, L, MP> GenericDistanceTrait<F, LineTag, MultiPointTag, MP> for L
-where
-    F: GeoFloat,
-    L: LineTraitExt<T = F>,
-    MP: MultiPointTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MP) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for point in rhs.points_ext() {
-            let dist = self.distance_ext(&point);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
-
-// Line to MultiLineString distance implementation
-impl<F, L, MLS> GenericDistanceTrait<F, LineTag, MultiLineStringTag, MLS> for L
-where
-    F: GeoFloat,
-    L: LineTraitExt<T = F>,
-    MLS: MultiLineStringTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MLS) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for linestring in rhs.line_strings_ext() {
-            let dist = self.distance_ext(&linestring);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
-
-// Line to MultiPolygon distance implementation
-impl<F, L, MPoly> GenericDistanceTrait<F, LineTag, MultiPolygonTag, MPoly> for L
-where
-    F: GeoFloat,
-    L: LineTraitExt<T = F>,
-    MPoly: MultiPolygonTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MPoly) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for polygon in rhs.polygons_ext() {
-            let dist = self.distance_ext(&polygon);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for LineString (generic traits)            │
@@ -892,69 +814,6 @@ where
     }
 }
 
-// LineString to MultiPoint distance implementation
-impl<F, LS, MP> GenericDistanceTrait<F, LineStringTag, MultiPointTag, MP> for LS
-where
-    F: GeoFloat,
-    LS: LineStringTraitExt<T = F>,
-    MP: MultiPointTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MP) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for point in rhs.points_ext() {
-            let dist = self.distance_ext(&point);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
-
-// LineString to MultiLineString distance implementation
-// This now works because we have a general LineString to LineString implementation above
-impl<F, LS, MLS> GenericDistanceTrait<F, LineStringTag, MultiLineStringTag, MLS> for LS
-where
-    F: GeoFloat,
-    LS: LineStringTraitExt<T = F>,
-    MLS: MultiLineStringTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MLS) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for linestring in rhs.line_strings_ext() {
-            let dist = self.distance_ext(&linestring);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
-
-// LineString to MultiPolygon distance implementation
-impl<F, LS, MPoly> GenericDistanceTrait<F, LineStringTag, MultiPolygonTag, MPoly> for LS
-where
-    F: GeoFloat,
-    LS: LineStringTraitExt<T = F>,
-    MPoly: MultiPolygonTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MPoly) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for polygon in rhs.polygons_ext() {
-            let dist = self.distance_ext(&polygon);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Polygon (generic traits)              │
@@ -1001,68 +860,6 @@ where
     }
 }
 
-// Polygon to MultiPoint distance implementation
-impl<F, P, MP> GenericDistanceTrait<F, PolygonTag, MultiPointTag, MP> for P
-where
-    F: GeoFloat,
-    P: PolygonTraitExt<T = F>,
-    MP: MultiPointTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MP) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for point in rhs.points_ext() {
-            let dist = self.distance_ext(&point);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
-
-// Polygon to MultiLineString distance implementation
-impl<F, P, MLS> GenericDistanceTrait<F, PolygonTag, MultiLineStringTag, MLS> for P
-where
-    F: GeoFloat,
-    P: PolygonTraitExt<T = F>,
-    MLS: MultiLineStringTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MLS) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for linestring in rhs.line_strings_ext() {
-            let dist = self.distance_ext(&linestring);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
-
-// Polygon to MultiPolygon distance implementation
-impl<F, P, MPoly> GenericDistanceTrait<F, PolygonTag, MultiPolygonTag, MPoly> for P
-where
-    F: GeoFloat,
-    P: PolygonTraitExt<T = F>,
-    MPoly: MultiPolygonTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &MPoly) -> F {
-        let mut min_dist: F = Bounded::max_value();
-        for polygon in rhs.polygons_ext() {
-            let dist = self.distance_ext(&polygon);
-            min_dist = min_dist.min(dist);
-        }
-        if min_dist == Bounded::max_value() {
-            F::zero()
-        } else {
-            min_dist
-        }
-    }
-}
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Rect and Triangle (generic traits)     │
@@ -1145,6 +942,66 @@ symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, RectTr
 impl_distance_ext_for_iter_geometry_trait!(MultiPointTraitExt, MultiPointTag, points_ext);
 impl_distance_ext_for_iter_geometry_trait!(MultiLineStringTraitExt, MultiLineStringTag, line_strings_ext);
 impl_distance_ext_for_iter_geometry_trait!(MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
+
+// Point to multi-geometry types (standard pattern for LineString and Polygon)
+impl_single_to_multi_geometry_distance!(PointTraitExt, PointTag, MultiLineStringTraitExt, MultiLineStringTag, line_strings_ext);
+impl_single_to_multi_geometry_distance!(PointTraitExt, PointTag, MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
+
+// Cross-type distance implementations using the new macro
+// Line to multi-geometry types
+impl_single_to_multi_geometry_distance!(LineTraitExt, LineTag, MultiPointTraitExt, MultiPointTag, points_ext);
+impl_single_to_multi_geometry_distance!(LineTraitExt, LineTag, MultiLineStringTraitExt, MultiLineStringTag, line_strings_ext);
+impl_single_to_multi_geometry_distance!(LineTraitExt, LineTag, MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
+
+// LineString to multi-geometry types
+impl_single_to_multi_geometry_distance!(LineStringTraitExt, LineStringTag, MultiPointTraitExt, MultiPointTag, points_ext);
+impl_single_to_multi_geometry_distance!(LineStringTraitExt, LineStringTag, MultiLineStringTraitExt, MultiLineStringTag, line_strings_ext);
+impl_single_to_multi_geometry_distance!(LineStringTraitExt, LineStringTag, MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
+
+// Polygon to multi-geometry types
+impl_single_to_multi_geometry_distance!(PolygonTraitExt, PolygonTag, MultiPointTraitExt, MultiPointTag, points_ext);
+impl_single_to_multi_geometry_distance!(PolygonTraitExt, PolygonTag, MultiLineStringTraitExt, MultiLineStringTag, line_strings_ext);
+impl_single_to_multi_geometry_distance!(PolygonTraitExt, PolygonTag, MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
+
+// Symmetric implementations for cross-type distance calculations
+// Point to multi-geometry types
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPointTraitExt, MultiPointTag, PointTraitExt, PointTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiLineStringTraitExt, MultiLineStringTag, PointTraitExt, PointTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPolygonTraitExt, MultiPolygonTag, PointTraitExt, PointTag);
+
+// Line to multi-geometry types
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPointTraitExt, MultiPointTag, LineTraitExt, LineTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiLineStringTraitExt, MultiLineStringTag, LineTraitExt, LineTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPolygonTraitExt, MultiPolygonTag, LineTraitExt, LineTag);
+
+// LineString to multi-geometry types
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPointTraitExt, MultiPointTag, LineStringTraitExt, LineStringTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiLineStringTraitExt, MultiLineStringTag, LineStringTraitExt, LineStringTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPolygonTraitExt, MultiPolygonTag, LineStringTraitExt, LineStringTag);
+
+// Polygon to multi-geometry types
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPointTraitExt, MultiPointTag, PolygonTraitExt, PolygonTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiLineStringTraitExt, MultiLineStringTag, PolygonTraitExt, PolygonTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPolygonTraitExt, MultiPolygonTag, PolygonTraitExt, PolygonTag);
+
+// Multi-geometry to Rect and Triangle types
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPointTraitExt, MultiPointTag, RectTraitExt, RectTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiLineStringTraitExt, MultiLineStringTag, RectTraitExt, RectTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPolygonTraitExt, MultiPolygonTag, RectTraitExt, RectTag);
+
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPointTraitExt, MultiPointTag, TriangleTraitExt, TriangleTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiLineStringTraitExt, MultiLineStringTag, TriangleTraitExt, TriangleTag);
+symmetric_distance_ext_trait_impl!(GeoFloat, MultiPolygonTraitExt, MultiPolygonTag, TriangleTraitExt, TriangleTag);
+
+// Multi-geometry to multi-geometry implementations
+impl_single_to_multi_geometry_distance!(MultiPointTraitExt, MultiPointTag, MultiLineStringTraitExt, MultiLineStringTag, line_strings_ext);
+impl_single_to_multi_geometry_distance!(MultiPointTraitExt, MultiPointTag, MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
+
+impl_single_to_multi_geometry_distance!(MultiLineStringTraitExt, MultiLineStringTag, MultiPointTraitExt, MultiPointTag, points_ext);
+impl_single_to_multi_geometry_distance!(MultiLineStringTraitExt, MultiLineStringTag, MultiPolygonTraitExt, MultiPolygonTag, polygons_ext);
+
+impl_single_to_multi_geometry_distance!(MultiPolygonTraitExt, MultiPolygonTag, MultiPointTraitExt, MultiPointTag, points_ext);
+impl_single_to_multi_geometry_distance!(MultiPolygonTraitExt, MultiPolygonTag, MultiLineStringTraitExt, MultiLineStringTag, line_strings_ext);
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementation for Geometry (generic traits)               │
@@ -1232,8 +1089,34 @@ where
             (GeometryTypeExt::Rect(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
 
             // Cross-type combinations with MultiPoint
+            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Point(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::LineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Polygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::MultiLineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::MultiPolygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
+            
             // Cross-type combinations with MultiLineString
+            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Point(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::LineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Polygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::MultiPoint(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::MultiPolygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
+
             // Cross-type combinations with MultiPolygon
+            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Point(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::LineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Polygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::MultiPoint(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::MultiLineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
+            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
 
             // Cross-type combinations with GeometryCollection
 
