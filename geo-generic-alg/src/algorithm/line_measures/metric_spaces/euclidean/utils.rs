@@ -1485,4 +1485,251 @@ mod tests {
             );
         }
     }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Geometric Edge Cases Tests                                 │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_collinear_linestring_geometries() {
+        // Test linestrings where all points are collinear
+        let collinear_ls1 = LineString::from(vec![
+            (0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (3.0, 3.0)
+        ]);
+        let collinear_ls2 = LineString::from(vec![
+            (0.0, 1.0), (1.0, 2.0), (2.0, 3.0)
+        ]);
+
+        let concrete_dist = Euclidean.distance(&collinear_ls1, &collinear_ls2);
+        let generic_dist = nearest_neighbour_distance(&collinear_ls1, &collinear_ls2);
+
+        assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-10);
+        // Distance should be sqrt(2)/2 (perpendicular distance between parallel lines)
+        assert_relative_eq!(concrete_dist, std::f64::consts::SQRT_2 / 2.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_degenerate_triangle_as_line() {
+        // Triangle where all three points are collinear (degenerate triangle)
+        let degenerate_triangle = Triangle::new(
+            coord! { x: 0.0, y: 0.0 },
+            coord! { x: 1.0, y: 1.0 },
+            coord! { x: 2.0, y: 2.0 },
+        );
+        let point = Point::new(0.0, 1.0);
+
+        let concrete_dist = Euclidean.distance(&degenerate_triangle, &point);
+        let generic_dist = distance_triangle_to_point_generic(&degenerate_triangle, &point);
+
+        assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-10);
+        // Distance should be sqrt(2)/2 (distance from point to line y=x)
+        assert_relative_eq!(concrete_dist, std::f64::consts::SQRT_2 / 2.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_self_intersecting_polygon() {
+        // Create a bowtie/figure-8 shaped self-intersecting polygon
+        let self_intersecting = LineString::from(vec![
+            (0.0, 0.0), (2.0, 2.0), (2.0, 0.0), (0.0, 2.0), (0.0, 0.0)
+        ]);
+        let polygon = Polygon::new(self_intersecting, vec![]);
+        let point = Point::new(3.0, 1.0); // Outside the polygon
+
+        let concrete_dist = Euclidean.distance(&point, &polygon);
+        let generic_dist = distance_point_to_polygon_generic(&point, &polygon);
+
+        assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-10);
+        assert_relative_eq!(concrete_dist, 1.0, epsilon = 1e-10); // Distance to closest edge
+    }
+
+    #[test]
+    fn test_nearly_touching_geometries() {
+        // Test geometries separated by very small distances
+        let epsilon_dist = 1e-12;
+
+        let line1 = Line::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 1.0, y: 0.0 });
+        let line2 = Line::new(coord! { x: 0.0, y: epsilon_dist }, coord! { x: 1.0, y: epsilon_dist });
+
+        let concrete_dist = Euclidean.distance(&line1, &line2);
+        let generic_dist = distance_line_to_line_generic(&line1, &line2);
+
+        assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-15);
+        assert_relative_eq!(concrete_dist, epsilon_dist, epsilon = 1e-15);
+    }
+
+    #[test]
+    fn test_very_close_but_separate_polygons() {
+        // Two polygons separated by extremely small distance
+        let tiny_gap = 1e-14;
+
+        let poly1_exterior = LineString::from(vec![
+            (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)
+        ]);
+        let poly1 = Polygon::new(poly1_exterior, vec![]);
+
+        let poly2_exterior = LineString::from(vec![
+            (1.0 + tiny_gap, 0.0), (2.0 + tiny_gap, 0.0),
+            (2.0 + tiny_gap, 1.0), (1.0 + tiny_gap, 1.0), (1.0 + tiny_gap, 0.0)
+        ]);
+        let poly2 = Polygon::new(poly2_exterior, vec![]);
+
+        let concrete_dist = Euclidean.distance(&poly1, &poly2);
+        let generic_dist = distance_polygon_to_polygon_generic(&poly1, &poly2);
+
+        assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-15);
+        assert_relative_eq!(concrete_dist, tiny_gap, epsilon = 1e-16);
+    }
+
+    #[test]
+    fn test_overlapping_but_not_intersecting_linestrings() {
+        // LineStrings that overlap in projection but are at different heights
+        let ls1 = LineString::from(vec![(0.0, 0.0), (2.0, 0.0)]);
+        let ls2 = LineString::from(vec![(1.0, 1e-13), (3.0, 1e-13)]);
+
+        let concrete_dist = Euclidean.distance(&ls1, &ls2);
+        let generic_dist = nearest_neighbour_distance(&ls1, &ls2);
+
+        assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-15);
+        assert_relative_eq!(concrete_dist, 1e-13, epsilon = 1e-16);
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Numerical Precision Tests                                  │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_very_close_but_non_zero_distances() {
+        // Test extremely small but non-zero distances to check floating-point precision
+        let test_cases = [1e-15, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10];
+
+        for &tiny_dist in &test_cases {
+            let p1 = Point::new(0.0, 0.0);
+            let p2 = Point::new(tiny_dist, 0.0);
+
+            let concrete_dist = Euclidean.distance(&p1, &p2);
+            let generic_dist = point_distance_generic(&p1, &p2);
+
+            assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-16);
+            assert_relative_eq!(concrete_dist, tiny_dist, epsilon = 1e-16);
+            assert!(concrete_dist > 0.0, "Distance should be positive for tiny_dist = {}", tiny_dist);
+        }
+    }
+
+    #[test]
+    fn test_numerical_precision_near_floating_point_limits() {
+        // Test with coordinates that produce distances near floating-point precision limits
+        let base = 1.0;
+        let tiny_offset = std::f64::EPSILON * 10.0; // Slightly above machine epsilon
+
+        let p1 = Point::new(base, base);
+        let p2 = Point::new(base + tiny_offset, base);
+
+        let concrete_dist = Euclidean.distance(&p1, &p2);
+        let generic_dist = point_distance_generic(&p1, &p2);
+
+        assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-15);
+        assert!(concrete_dist > 0.0);
+        assert!(concrete_dist < 1e-14); // Should be very small but measurable
+    }
+
+    #[test]
+    fn test_precision_with_large_coordinate_differences() {
+        // Test with one geometry having small coordinates and another having large coordinates
+        let small_point = Point::new(1e-10, 1e-10);
+        let large_polygon = Polygon::new(
+            LineString::from(vec![
+                (1e8, 1e8), (1e8 + 1.0, 1e8), (1e8 + 1.0, 1e8 + 1.0), (1e8, 1e8 + 1.0), (1e8, 1e8)
+            ]),
+            vec![]
+        );
+
+        let concrete_dist = Euclidean.distance(&small_point, &large_polygon);
+        let generic_dist = distance_point_to_polygon_generic(&small_point, &large_polygon);
+
+        assert_relative_eq!(concrete_dist, generic_dist, max_relative = 1e-10);
+        assert!(concrete_dist > 1e7); // Should be very large distance
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Robustness Tests                                           │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_nan_coordinate_handling() {
+        // Test behavior with NaN coordinates
+        let nan_point = Point::new(f64::NAN, 0.0);
+        let normal_point = Point::new(1.0, 1.0);
+
+        let distance = point_distance_generic(&nan_point, &normal_point);
+
+        // Distance involving NaN should be NaN
+        assert!(distance.is_nan(), "Distance with NaN coordinate should be NaN");
+    }
+
+    #[test]
+    fn test_infinity_coordinate_handling() {
+        // Test behavior with infinite coordinates
+        let inf_point = Point::new(f64::INFINITY, 0.0);
+        let normal_point = Point::new(1.0, 1.0);
+
+        let distance = point_distance_generic(&inf_point, &normal_point);
+
+        // Distance involving infinity should be infinity
+        assert!(distance.is_infinite(), "Distance with infinite coordinate should be infinite");
+    }
+
+    #[test]
+    fn test_negative_infinity_coordinate_handling() {
+        // Test behavior with negative infinite coordinates
+        let neg_inf_point = Point::new(f64::NEG_INFINITY, 0.0);
+        let normal_point = Point::new(1.0, 1.0);
+
+        let distance = point_distance_generic(&neg_inf_point, &normal_point);
+
+        // Distance involving negative infinity should be infinity
+        assert!(distance.is_infinite(), "Distance with negative infinite coordinate should be infinite");
+    }
+
+    #[test]
+    fn test_mixed_special_values() {
+        // Test combinations of NaN and infinity
+        let nan_point = Point::new(f64::NAN, f64::INFINITY);
+        let inf_point = Point::new(f64::INFINITY, f64::NEG_INFINITY);
+
+        let distance = point_distance_generic(&nan_point, &inf_point);
+
+        // Any operation involving NaN should result in NaN or Infinity depending on the math
+        // Since we're using hypot which can handle NaN differently, let's test that it's either NaN or infinite
+        assert!(distance.is_nan() || distance.is_infinite(),
+                "Distance involving NaN and Infinity should be NaN or Infinite, got: {}", distance);
+    }
+
+    #[test]
+    fn test_subnormal_number_handling() {
+        // Test with subnormal (denormalized) numbers
+        let subnormal = f64::MIN_POSITIVE / 2.0; // This creates a subnormal number
+        assert!(subnormal > 0.0 && subnormal < f64::MIN_POSITIVE);
+
+        let p1 = Point::new(0.0, 0.0);
+        let p2 = Point::new(subnormal, 0.0);
+
+        let concrete_dist = Euclidean.distance(&p1, &p2);
+        let generic_dist = point_distance_generic(&p1, &p2);
+
+        assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-16);
+        assert_relative_eq!(concrete_dist, subnormal, epsilon = 1e-16);
+        assert!(concrete_dist > 0.0);
+    }
+
+    #[test]
+    fn test_zero_vs_negative_zero() {
+        // Test behavior with positive zero vs negative zero
+        let p1 = Point::new(0.0, 0.0);
+        let p2 = Point::new(-0.0, -0.0); // Negative zero
+
+        let distance = point_distance_generic(&p1, &p2);
+
+        // Distance between +0 and -0 should be exactly 0
+        assert_eq!(distance, 0.0, "Distance between +0 and -0 should be exactly 0");
+    }
 }
