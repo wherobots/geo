@@ -808,13 +808,15 @@ symmetric_distance_ext_trait_impl!(
     LineTag
 );
 
-// LineString-to-LineString direct distance implementation
-impl<F, LS: LineStringTraitExt<T = F>> GenericDistanceTrait<F, LineStringTag, LineStringTag, LS>
-    for LS
+// LineString-to-LineString distance implementation
+// This general implementation supports both same-type (LS to LS) and different-type (LS1 to LS2)
+impl<F, LS1, LS2> GenericDistanceTrait<F, LineStringTag, LineStringTag, LS2> for LS1
 where
     F: GeoFloat,
+    LS1: LineStringTraitExt<T = F>,
+    LS2: LineStringTraitExt<T = F>,
 {
-    fn generic_distance_trait(&self, rhs: &LS) -> F {
+    fn generic_distance_trait(&self, rhs: &LS2) -> F {
         let mut min_dist: F = Float::max_value();
         for line1 in self.lines() {
             for line2 in rhs.lines() {
@@ -844,6 +846,70 @@ where
 {
     fn generic_distance_trait(&self, rhs: &Poly) -> F {
         distance_linestring_to_polygon_generic(self, rhs)
+    }
+}
+
+// LineString to MultiPoint distance implementation
+impl<F, LS, MP> GenericDistanceTrait<F, LineStringTag, MultiPointTag, MP> for LS
+where
+    F: GeoFloat,
+    LS: LineStringTraitExt<T = F>,
+    MP: MultiPointTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &MP) -> F {
+        let mut min_dist: F = Bounded::max_value();
+        for point in rhs.points_ext() {
+            let dist = self.distance_ext(&point);
+            min_dist = min_dist.min(dist);
+        }
+        if min_dist == Bounded::max_value() {
+            F::zero()
+        } else {
+            min_dist
+        }
+    }
+}
+
+// LineString to MultiLineString distance implementation
+// This now works because we have a general LineString to LineString implementation above
+impl<F, LS, MLS> GenericDistanceTrait<F, LineStringTag, MultiLineStringTag, MLS> for LS
+where
+    F: GeoFloat,
+    LS: LineStringTraitExt<T = F>,
+    MLS: MultiLineStringTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &MLS) -> F {
+        let mut min_dist: F = Bounded::max_value();
+        for linestring in rhs.line_strings_ext() {
+            let dist = self.distance_ext(&linestring);
+            min_dist = min_dist.min(dist);
+        }
+        if min_dist == Bounded::max_value() {
+            F::zero()
+        } else {
+            min_dist
+        }
+    }
+}
+
+// LineString to MultiPolygon distance implementation
+impl<F, LS, MPoly> GenericDistanceTrait<F, LineStringTag, MultiPolygonTag, MPoly> for LS
+where
+    F: GeoFloat,
+    LS: LineStringTraitExt<T = F>,
+    MPoly: MultiPolygonTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &MPoly) -> F {
+        let mut min_dist: F = Bounded::max_value();
+        for polygon in rhs.polygons_ext() {
+            let dist = self.distance_ext(&polygon);
+            min_dist = min_dist.min(dist);
+        }
+        if min_dist == Bounded::max_value() {
+            F::zero()
+        } else {
+            min_dist
+        }
     }
 }
 
@@ -1010,6 +1076,15 @@ where
             (GeometryTypeExt::Line(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
 
             // Cross-type combinations with LineString
+            (GeometryTypeExt::LineString(left), GeometryTypeExt::Point(right)) => left.distance_ext(right),
+            (GeometryTypeExt::LineString(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
+            (GeometryTypeExt::LineString(left), GeometryTypeExt::Polygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::LineString(left), GeometryTypeExt::MultiPoint(right)) => left.distance_ext(right),
+            (GeometryTypeExt::LineString(left), GeometryTypeExt::MultiLineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::LineString(left), GeometryTypeExt::MultiPolygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::LineString(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
+            (GeometryTypeExt::LineString(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
+
             // Cross-type combinations with Polygon
             // Cross-type combinations with MultiPoint
             // Cross-type combinations with MultiLineString
