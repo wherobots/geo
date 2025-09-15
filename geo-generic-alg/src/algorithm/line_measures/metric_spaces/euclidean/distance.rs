@@ -1115,7 +1115,6 @@ impl_cross_type_array!(symmetric_single_to_multi: TriangleTraitExt, TriangleTag 
 // │ Implementation for Geometry (generic traits)               │
 // └────────────────────────────────────────────────────────────┘
 
-// Generic trait distance implementation for Geometry dispatch.
 impl<F, G: GeometryTraitExt<T = F>> GenericDistanceTrait<F, GeometryTag, GeometryTag, G> for G
 where
     F: GeoFloat,
@@ -1123,258 +1122,36 @@ where
     fn generic_distance_trait(&self, rhs: &G) -> F {
         use geo_traits_ext::GeometryTypeExt;
 
-        match (self.as_type_ext(), rhs.as_type_ext()) {
-            (GeometryTypeExt::Point(left), GeometryTypeExt::Point(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Point(left), GeometryTypeExt::Line(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Point(left), GeometryTypeExt::LineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Point(left), GeometryTypeExt::Polygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Point(left), GeometryTypeExt::MultiPoint(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Point(left), GeometryTypeExt::MultiLineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Point(left), GeometryTypeExt::MultiPolygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Point(left), GeometryTypeExt::Rect(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Point(left), GeometryTypeExt::Triangle(right)) => {
-                left.distance_ext(right)
-            }
-
-            (GeometryTypeExt::Line(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
-            (GeometryTypeExt::Line(left), GeometryTypeExt::Point(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Line(left), GeometryTypeExt::LineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Line(left), GeometryTypeExt::Polygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Line(left), GeometryTypeExt::MultiPoint(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Line(left), GeometryTypeExt::MultiLineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Line(left), GeometryTypeExt::MultiPolygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Line(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
-            (GeometryTypeExt::Line(left), GeometryTypeExt::Triangle(right)) => {
-                left.distance_ext(right)
-            }
-
-            (GeometryTypeExt::LineString(left), GeometryTypeExt::LineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::LineString(left), GeometryTypeExt::Point(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::LineString(left), GeometryTypeExt::Line(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::LineString(left), GeometryTypeExt::Polygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::LineString(left), GeometryTypeExt::MultiPoint(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::LineString(left), GeometryTypeExt::MultiLineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::LineString(left), GeometryTypeExt::MultiPolygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::LineString(left), GeometryTypeExt::Rect(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::LineString(left), GeometryTypeExt::Triangle(right)) => {
-                left.distance_ext(right)
-            }
-
-            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Polygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Point(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Line(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Polygon(left), GeometryTypeExt::LineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Polygon(left), GeometryTypeExt::MultiPoint(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Polygon(left), GeometryTypeExt::MultiLineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Polygon(left), GeometryTypeExt::MultiPolygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Rect(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Triangle(right)) => {
-                left.distance_ext(right)
-            }
-
-            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Triangle(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Point(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Line(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Triangle(left), GeometryTypeExt::LineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Polygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Triangle(left), GeometryTypeExt::MultiPoint(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Triangle(left), GeometryTypeExt::MultiLineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Triangle(left), GeometryTypeExt::MultiPolygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Rect(right)) => {
-                left.distance_ext(right)
-            }
-
-            (GeometryTypeExt::Rect(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
-            (GeometryTypeExt::Rect(left), GeometryTypeExt::Point(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Rect(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
-            (GeometryTypeExt::Rect(left), GeometryTypeExt::LineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Rect(left), GeometryTypeExt::Polygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Rect(left), GeometryTypeExt::MultiPoint(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Rect(left), GeometryTypeExt::MultiLineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Rect(left), GeometryTypeExt::MultiPolygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Rect(left), GeometryTypeExt::Triangle(right)) => {
-                left.distance_ext(right)
-            }
-
-            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::MultiPoint(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Point(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Line(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::LineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Polygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::MultiLineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::MultiPolygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Triangle(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Rect(right)) => {
-                left.distance_ext(right)
-            }
-
-            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::MultiLineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Point(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Line(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::LineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Polygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::MultiPoint(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::MultiPolygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Triangle(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Rect(right)) => {
-                left.distance_ext(right)
-            }
-
-            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::MultiPolygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Point(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Line(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::LineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Polygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::MultiPoint(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::MultiLineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Triangle(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Rect(right)) => {
-                left.distance_ext(right)
-            }
-
-            // For all other combinations, convert to concrete geometry and use Euclidean implementation
-            _ => {
-                let g1 = self.to_geometry();
-                let g2 = rhs.to_geometry();
-                Euclidean.distance(&g1, &g2)
-            }
+        // This macro generates the entire match statement
+        macro_rules! generate_distance_match {
+            ($($left:ident => [$($right:ident),+]),+ $(,)?) => {
+                match (self.as_type_ext(), rhs.as_type_ext()) {
+                    $($(
+                        (GeometryTypeExt::$left(left), GeometryTypeExt::$right(right)) => {
+                            left.distance_ext(right)
+                        },
+                    )+)+
+                    _ => {
+                        let g1 = self.to_geometry();
+                        let g2 = rhs.to_geometry();
+                        Euclidean.distance(&g1, &g2)
+                    }
+                }
+            };
         }
+
+        // Generate the match with explicit left => [right types] mappings
+        generate_distance_match!(
+            Point => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Line => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            LineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Polygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Triangle => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Rect => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            MultiPoint => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            MultiLineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            MultiPolygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+        )
     }
 }
 
