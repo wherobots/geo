@@ -1105,81 +1105,6 @@ impl_cross_type_array!(symmetric_single_to_multi: TriangleTraitExt, TriangleTag 
 ]);
 
 // ┌────────────────────────────────────────────────────────────┐
-// │ Implementation for Geometry (generic traits)               │
-// └────────────────────────────────────────────────────────────┘
-
-// Generate implementations for Geometry with other types using conversion
-macro_rules! impl_distance_geometry_to_type {
-    ($rhs_type:ident, $rhs_tag:ident) => {
-        impl<F, LHS, RHS> GenericDistanceTrait<F, GeometryTag, $rhs_tag, RHS> for LHS
-        where
-            F: GeoFloat,
-            LHS: GeometryTraitExt<T = F>,
-            RHS: $rhs_type<T = F>,
-        {
-            fn generic_distance_trait(&self, rhs: &RHS) -> F {
-                // Convert both to concrete types and calculate distance
-                let geom = self.to_geometry();
-                let rhs_geom = rhs.to_geometry();
-                Euclidean.distance(&geom, &rhs_geom)
-            }
-        }
-    };
-}
-
-impl_distance_geometry_to_type!(PointTraitExt, PointTag);
-impl_distance_geometry_to_type!(LineTraitExt, LineTag);
-impl_distance_geometry_to_type!(LineStringTraitExt, LineStringTag);
-impl_distance_geometry_to_type!(PolygonTraitExt, PolygonTag);
-impl_distance_geometry_to_type!(MultiPointTraitExt, MultiPointTag);
-impl_distance_geometry_to_type!(MultiLineStringTraitExt, MultiLineStringTag);
-impl_distance_geometry_to_type!(MultiPolygonTraitExt, MultiPolygonTag);
-impl_distance_geometry_to_type!(RectTraitExt, RectTag);
-impl_distance_geometry_to_type!(TriangleTraitExt, TriangleTag);
-impl_distance_geometry_to_type!(GeometryCollectionTraitExt, GeometryCollectionTag);
-
-impl<F, G: GeometryTraitExt<T = F>> GenericDistanceTrait<F, GeometryTag, GeometryTag, G> for G
-where
-    F: GeoFloat,
-{
-    fn generic_distance_trait(&self, rhs: &G) -> F {
-        use geo_traits_ext::GeometryTypeExt;
-
-        // This macro generates the entire match statement
-        macro_rules! generate_distance_match {
-            ($($left:ident => [$($right:ident),+]),+ $(,)?) => {
-                match (self.as_type_ext(), rhs.as_type_ext()) {
-                    $($(
-                        (GeometryTypeExt::$left(left), GeometryTypeExt::$right(right)) => {
-                            left.distance_ext(right)
-                        },
-                    )+)+
-                    _ => {
-                        let g1 = self.to_geometry();
-                        let g2 = rhs.to_geometry();
-                        Euclidean.distance(&g1, &g2)
-                    }
-                }
-            };
-        }
-
-        // Generate the match with explicit left => [right types] mappings
-        generate_distance_match!(
-            Point => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Line => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            LineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Polygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Triangle => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Rect => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            MultiPoint => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            MultiLineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            MultiPolygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            GeometryCollection => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
-        )
-    }
-}
-
-// ┌────────────────────────────────────────────────────────────┐
 // │ Implementation for GeometryCollection (generic traits)     │
 // └────────────────────────────────────────────────────────────┘
 
@@ -1197,35 +1122,12 @@ macro_rules! impl_distance_geometry_collection_from_geometry {
 
                 self.geometries_ext()
                     .map(|geom| {
-                        // Convert both to concrete types and calculate distance
-                        let geom_concrete = geom.to_geometry();
-                        let rhs_concrete = rhs.to_geometry();
-                        Euclidean.distance(&geom_concrete, &rhs_concrete)
+                        geom.distance_ext(rhs)
                     })
                     .fold(Bounded::max_value(), |acc, dist| acc.min(dist))
             }
         }
     };
-}
-
-// Special implementation for CoordTraitExt which doesn't have to_geometry()
-impl<F, LHS, RHS> GenericDistanceTrait<F, GeometryCollectionTag, CoordTag, RHS> for LHS
-where
-    F: GeoFloat,
-    LHS: GeometryCollectionTraitExt<T = F>,
-    RHS: CoordTraitExt<T = F>,
-{
-    fn generic_distance_trait(&self, rhs: &RHS) -> F {
-        use num_traits::Bounded;
-
-        let rhs_point = Point::from(rhs.geo_coord());
-        self.geometries_ext()
-            .map(|geom| {
-                let geom_concrete = geom.to_geometry();
-                Euclidean.distance(&geom_concrete, &rhs_point)
-            })
-            .fold(Bounded::max_value(), |acc, dist| acc.min(dist))
-    }
 }
 
 impl_distance_geometry_collection_from_geometry!(PointTraitExt, PointTag);
@@ -1237,17 +1139,8 @@ impl_distance_geometry_collection_from_geometry!(MultiLineStringTraitExt, MultiL
 impl_distance_geometry_collection_from_geometry!(MultiPolygonTraitExt, MultiPolygonTag);
 impl_distance_geometry_collection_from_geometry!(RectTraitExt, RectTag);
 impl_distance_geometry_collection_from_geometry!(TriangleTraitExt, TriangleTag);
-impl_distance_geometry_collection_from_geometry!(GeometryTraitExt, GeometryTag);
 impl_distance_geometry_collection_from_geometry!(GeometryCollectionTraitExt, GeometryCollectionTag);
 
-// Symmetric implementations for GeometryCollection
-symmetric_distance_ext_trait_impl!(
-    GeoFloat,
-    CoordTraitExt,
-    CoordTag,
-    GeometryCollectionTraitExt,
-    GeometryCollectionTag
-);
 symmetric_distance_ext_trait_impl!(
     GeoFloat,
     PointTraitExt,
@@ -1311,6 +1204,78 @@ symmetric_distance_ext_trait_impl!(
     GeometryCollectionTraitExt,
     GeometryCollectionTag
 );
+
+// ┌────────────────────────────────────────────────────────────┐
+// │ Implementation for Geometry (generic traits)               │
+// └────────────────────────────────────────────────────────────┘
+
+// Generate implementations for Geometry with other types using conversion
+macro_rules! impl_distance_geometry_to_type {
+    ($rhs_type:ident, $rhs_tag:ident) => {
+        impl<F, LHS, RHS> GenericDistanceTrait<F, GeometryTag, $rhs_tag, RHS> for LHS
+        where
+            F: GeoFloat,
+            LHS: GeometryTraitExt<T = F>,
+            RHS: $rhs_type<T = F>,
+        {
+            fn generic_distance_trait(&self, rhs: &RHS) -> F {
+                self.distance_ext(rhs)
+            }
+        }
+    };
+}
+
+impl_distance_geometry_to_type!(PointTraitExt, PointTag);
+impl_distance_geometry_to_type!(LineTraitExt, LineTag);
+impl_distance_geometry_to_type!(LineStringTraitExt, LineStringTag);
+impl_distance_geometry_to_type!(PolygonTraitExt, PolygonTag);
+impl_distance_geometry_to_type!(MultiPointTraitExt, MultiPointTag);
+impl_distance_geometry_to_type!(MultiLineStringTraitExt, MultiLineStringTag);
+impl_distance_geometry_to_type!(MultiPolygonTraitExt, MultiPolygonTag);
+impl_distance_geometry_to_type!(RectTraitExt, RectTag);
+impl_distance_geometry_to_type!(TriangleTraitExt, TriangleTag);
+impl_distance_geometry_to_type!(GeometryCollectionTraitExt, GeometryCollectionTag);
+
+impl<F, G: GeometryTraitExt<T = F>> GenericDistanceTrait<F, GeometryTag, GeometryTag, G> for G
+where
+    F: GeoFloat,
+{
+    fn generic_distance_trait(&self, rhs: &G) -> F {
+        use geo_traits_ext::GeometryTypeExt;
+
+        // This macro generates the entire match statement
+        macro_rules! generate_distance_match {
+            ($($left:ident => [$($right:ident),+]),+ $(,)?) => {
+                match (self.as_type_ext(), rhs.as_type_ext()) {
+                    $($(
+                        (GeometryTypeExt::$left(left), GeometryTypeExt::$right(right)) => {
+                            left.distance_ext(right)
+                        },
+                    )+)+
+                    _ => {
+                        let g1 = self.to_geometry();
+                        let g2 = rhs.to_geometry();
+                        Euclidean.distance(&g1, &g2)
+                    }
+                }
+            };
+        }
+
+        // Generate the match with explicit left => [right types] mappings
+        generate_distance_match!(
+            Point => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Line => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            LineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Polygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Triangle => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Rect => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            MultiPoint => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            MultiLineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            MultiPolygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            GeometryCollection => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+        )
+    }
+}
 
 #[cfg(test)]
 mod tests {
