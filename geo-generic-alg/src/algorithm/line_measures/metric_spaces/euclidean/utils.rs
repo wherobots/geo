@@ -1,6 +1,3 @@
-// Utility functions for generic distance calculations
-// This demonstrates the refactoring concept by moving key functions to a separate module
-
 use super::{Distance, Euclidean};
 use crate::algorithm::Intersects;
 use crate::coordinate_position::{coord_pos_relative_to_ring, CoordPos};
@@ -18,13 +15,10 @@ use rstar::RTree;
 // │ Helper functions for generic distance calculations         │
 // └────────────────────────────────────────────────────────────┘
 
-/// Uses an R* tree and nearest-neighbour lookups to calculate minimum distances
-/// This implementation properly checks line-to-line distances and intersections
 pub fn nearest_neighbour_distance<F: GeoFloat>(geom1: &LineString<F>, geom2: &LineString<F>) -> F {
     let tree_a = RTree::bulk_load(geom1.lines().map(CachedEnvelope::new).collect());
     let tree_b = RTree::bulk_load(geom2.lines().map(CachedEnvelope::new).collect());
 
-    // First check all line-to-line distances/intersections
     let mut min_distance: F = Bounded::max_value();
 
     for line1 in geom1.lines() {
@@ -39,7 +33,6 @@ pub fn nearest_neighbour_distance<F: GeoFloat>(geom1: &LineString<F>, geom2: &Li
         }
     }
 
-    // Also check point-to-line distances (for completeness)
     let point_line_dist = geom2
         .points()
         .fold(Bounded::max_value(), |acc: F, point| {
@@ -105,10 +98,6 @@ where
     let delta_y = py - nearest_y;
     delta_x.hypot(delta_y)
 }
-
-// ┌────────────────────────────────────────────────────────────┐
-// │ Sample generic distance functions (demonstrating concept)   │
-// └────────────────────────────────────────────────────────────┘
 
 /// Line to Line distance
 pub fn distance_line_to_line_generic<F, L1, L2>(line1: &L1, line2: &L2) -> F
