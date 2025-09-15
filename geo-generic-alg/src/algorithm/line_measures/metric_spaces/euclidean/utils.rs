@@ -1631,8 +1631,7 @@ mod tests {
             assert_relative_eq!(concrete_dist, tiny_dist, epsilon = 1e-16);
             assert!(
                 concrete_dist > 0.0,
-                "Distance should be positive for tiny_dist = {}",
-                tiny_dist
+                "Distance should be positive for tiny_dist = {tiny_dist}"
             );
         }
     }
@@ -1641,7 +1640,7 @@ mod tests {
     fn test_numerical_precision_near_floating_point_limits() {
         // Test with coordinates that produce distances near floating-point precision limits
         let base = 1.0;
-        let tiny_offset = std::f64::EPSILON * 10.0; // Slightly above machine epsilon
+        let tiny_offset = f64::EPSILON * 10.0; // Slightly above machine epsilon
 
         let p1 = Point::new(base, base);
         let p2 = Point::new(base + tiny_offset, base);
@@ -1737,8 +1736,7 @@ mod tests {
         // Since we're using hypot which can handle NaN differently, let's test that it's either NaN or infinite
         assert!(
             distance.is_nan() || distance.is_infinite(),
-            "Distance involving NaN and Infinity should be NaN or Infinite, got: {}",
-            distance
+            "Distance involving NaN and Infinity should be NaN or Infinite, got: {distance}"
         );
     }
 
