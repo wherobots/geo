@@ -1493,19 +1493,19 @@ mod tests {
     #[test]
     fn test_collinear_linestring_geometries() {
         // Test linestrings where all points are collinear
-        let collinear_ls1 = LineString::from(vec![
-            (0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (3.0, 3.0)
-        ]);
-        let collinear_ls2 = LineString::from(vec![
-            (0.0, 1.0), (1.0, 2.0), (2.0, 3.0)
-        ]);
+        let collinear_ls1 = LineString::from(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (3.0, 3.0)]);
+        let collinear_ls2 = LineString::from(vec![(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)]);
 
         let concrete_dist = Euclidean.distance(&collinear_ls1, &collinear_ls2);
         let generic_dist = nearest_neighbour_distance(&collinear_ls1, &collinear_ls2);
 
         assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-10);
         // Distance should be sqrt(2)/2 (perpendicular distance between parallel lines)
-        assert_relative_eq!(concrete_dist, std::f64::consts::SQRT_2 / 2.0, epsilon = 1e-10);
+        assert_relative_eq!(
+            concrete_dist,
+            std::f64::consts::SQRT_2 / 2.0,
+            epsilon = 1e-10
+        );
     }
 
     #[test]
@@ -1523,14 +1523,22 @@ mod tests {
 
         assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-10);
         // Distance should be sqrt(2)/2 (distance from point to line y=x)
-        assert_relative_eq!(concrete_dist, std::f64::consts::SQRT_2 / 2.0, epsilon = 1e-10);
+        assert_relative_eq!(
+            concrete_dist,
+            std::f64::consts::SQRT_2 / 2.0,
+            epsilon = 1e-10
+        );
     }
 
     #[test]
     fn test_self_intersecting_polygon() {
         // Create a bowtie/figure-8 shaped self-intersecting polygon
         let self_intersecting = LineString::from(vec![
-            (0.0, 0.0), (2.0, 2.0), (2.0, 0.0), (0.0, 2.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (2.0, 2.0),
+            (2.0, 0.0),
+            (0.0, 2.0),
+            (0.0, 0.0),
         ]);
         let polygon = Polygon::new(self_intersecting, vec![]);
         let point = Point::new(3.0, 1.0); // Outside the polygon
@@ -1548,7 +1556,10 @@ mod tests {
         let epsilon_dist = 1e-12;
 
         let line1 = Line::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 1.0, y: 0.0 });
-        let line2 = Line::new(coord! { x: 0.0, y: epsilon_dist }, coord! { x: 1.0, y: epsilon_dist });
+        let line2 = Line::new(
+            coord! { x: 0.0, y: epsilon_dist },
+            coord! { x: 1.0, y: epsilon_dist },
+        );
 
         let concrete_dist = Euclidean.distance(&line1, &line2);
         let generic_dist = distance_line_to_line_generic(&line1, &line2);
@@ -1563,13 +1574,20 @@ mod tests {
         let tiny_gap = 1e-14;
 
         let poly1_exterior = LineString::from(vec![
-            (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+            (0.0, 0.0),
         ]);
         let poly1 = Polygon::new(poly1_exterior, vec![]);
 
         let poly2_exterior = LineString::from(vec![
-            (1.0 + tiny_gap, 0.0), (2.0 + tiny_gap, 0.0),
-            (2.0 + tiny_gap, 1.0), (1.0 + tiny_gap, 1.0), (1.0 + tiny_gap, 0.0)
+            (1.0 + tiny_gap, 0.0),
+            (2.0 + tiny_gap, 0.0),
+            (2.0 + tiny_gap, 1.0),
+            (1.0 + tiny_gap, 1.0),
+            (1.0 + tiny_gap, 0.0),
         ]);
         let poly2 = Polygon::new(poly2_exterior, vec![]);
 
@@ -1611,7 +1629,11 @@ mod tests {
 
             assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-16);
             assert_relative_eq!(concrete_dist, tiny_dist, epsilon = 1e-16);
-            assert!(concrete_dist > 0.0, "Distance should be positive for tiny_dist = {}", tiny_dist);
+            assert!(
+                concrete_dist > 0.0,
+                "Distance should be positive for tiny_dist = {}",
+                tiny_dist
+            );
         }
     }
 
@@ -1638,9 +1660,13 @@ mod tests {
         let small_point = Point::new(1e-10, 1e-10);
         let large_polygon = Polygon::new(
             LineString::from(vec![
-                (1e8, 1e8), (1e8 + 1.0, 1e8), (1e8 + 1.0, 1e8 + 1.0), (1e8, 1e8 + 1.0), (1e8, 1e8)
+                (1e8, 1e8),
+                (1e8 + 1.0, 1e8),
+                (1e8 + 1.0, 1e8 + 1.0),
+                (1e8, 1e8 + 1.0),
+                (1e8, 1e8),
             ]),
-            vec![]
+            vec![],
         );
 
         let concrete_dist = Euclidean.distance(&small_point, &large_polygon);
@@ -1663,7 +1689,10 @@ mod tests {
         let distance = point_distance_generic(&nan_point, &normal_point);
 
         // Distance involving NaN should be NaN
-        assert!(distance.is_nan(), "Distance with NaN coordinate should be NaN");
+        assert!(
+            distance.is_nan(),
+            "Distance with NaN coordinate should be NaN"
+        );
     }
 
     #[test]
@@ -1675,7 +1704,10 @@ mod tests {
         let distance = point_distance_generic(&inf_point, &normal_point);
 
         // Distance involving infinity should be infinity
-        assert!(distance.is_infinite(), "Distance with infinite coordinate should be infinite");
+        assert!(
+            distance.is_infinite(),
+            "Distance with infinite coordinate should be infinite"
+        );
     }
 
     #[test]
@@ -1687,7 +1719,10 @@ mod tests {
         let distance = point_distance_generic(&neg_inf_point, &normal_point);
 
         // Distance involving negative infinity should be infinity
-        assert!(distance.is_infinite(), "Distance with negative infinite coordinate should be infinite");
+        assert!(
+            distance.is_infinite(),
+            "Distance with negative infinite coordinate should be infinite"
+        );
     }
 
     #[test]
@@ -1700,8 +1735,11 @@ mod tests {
 
         // Any operation involving NaN should result in NaN or Infinity depending on the math
         // Since we're using hypot which can handle NaN differently, let's test that it's either NaN or infinite
-        assert!(distance.is_nan() || distance.is_infinite(),
-                "Distance involving NaN and Infinity should be NaN or Infinite, got: {}", distance);
+        assert!(
+            distance.is_nan() || distance.is_infinite(),
+            "Distance involving NaN and Infinity should be NaN or Infinite, got: {}",
+            distance
+        );
     }
 
     #[test]
@@ -1730,6 +1768,9 @@ mod tests {
         let distance = point_distance_generic(&p1, &p2);
 
         // Distance between +0 and -0 should be exactly 0
-        assert_eq!(distance, 0.0, "Distance between +0 and -0 should be exactly 0");
+        assert_eq!(
+            distance, 0.0,
+            "Distance between +0 and -0 should be exactly 0"
+        );
     }
 }
