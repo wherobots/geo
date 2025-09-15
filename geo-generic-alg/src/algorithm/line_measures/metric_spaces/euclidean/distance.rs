@@ -1124,32 +1124,9 @@ where
         use geo_traits_ext::GeometryTypeExt;
 
         match (self.as_type_ext(), rhs.as_type_ext()) {
-            // Same-type combinations
             (GeometryTypeExt::Point(left), GeometryTypeExt::Point(right)) => {
                 left.distance_ext(right)
             }
-            (GeometryTypeExt::Line(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
-            (GeometryTypeExt::LineString(left), GeometryTypeExt::LineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Polygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::MultiPoint(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::MultiLineString(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::MultiPolygon(right)) => {
-                left.distance_ext(right)
-            }
-            (GeometryTypeExt::Rect(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
-            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Triangle(right)) => {
-                left.distance_ext(right)
-            }
-
-            // Cross-type combinations with Point
             (GeometryTypeExt::Point(left), GeometryTypeExt::Line(right)) => {
                 left.distance_ext(right)
             }
@@ -1174,11 +1151,8 @@ where
             (GeometryTypeExt::Point(left), GeometryTypeExt::Triangle(right)) => {
                 left.distance_ext(right)
             }
-            // (GeometryTypeExt::Point(left), GeometryTypeExt::GeometryCollection(right)) => {
-            //     left.distance_ext(right)
-            // }
 
-            // Cross-type combinations with Line
+            (GeometryTypeExt::Line(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
             (GeometryTypeExt::Line(left), GeometryTypeExt::Point(right)) => {
                 left.distance_ext(right)
             }
@@ -1202,7 +1176,9 @@ where
                 left.distance_ext(right)
             }
 
-            // Cross-type combinations with LineString
+            (GeometryTypeExt::LineString(left), GeometryTypeExt::LineString(right)) => {
+                left.distance_ext(right)
+            }
             (GeometryTypeExt::LineString(left), GeometryTypeExt::Point(right)) => {
                 left.distance_ext(right)
             }
@@ -1228,7 +1204,9 @@ where
                 left.distance_ext(right)
             }
 
-            // Cross-type combinations with Polygon
+            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Polygon(right)) => {
+                left.distance_ext(right)
+            }
             (GeometryTypeExt::Polygon(left), GeometryTypeExt::Point(right)) => {
                 left.distance_ext(right)
             }
@@ -1254,7 +1232,9 @@ where
                 left.distance_ext(right)
             }
 
-            // Cross-type combinations with Triangle
+            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Triangle(right)) => {
+                left.distance_ext(right)
+            }
             (GeometryTypeExt::Triangle(left), GeometryTypeExt::Point(right)) => {
                 left.distance_ext(right)
             }
@@ -1280,7 +1260,7 @@ where
                 left.distance_ext(right)
             }
 
-            // Cross-type combinations with Rect
+            (GeometryTypeExt::Rect(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
             (GeometryTypeExt::Rect(left), GeometryTypeExt::Point(right)) => {
                 left.distance_ext(right)
             }
@@ -1304,7 +1284,9 @@ where
                 left.distance_ext(right)
             }
 
-            // Cross-type combinations with MultiPoint
+            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::MultiPoint(right)) => {
+                left.distance_ext(right)
+            }
             (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::Point(right)) => {
                 left.distance_ext(right)
             }
@@ -1330,7 +1312,9 @@ where
                 left.distance_ext(right)
             }
 
-            // Cross-type combinations with MultiLineString
+            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::MultiLineString(right)) => {
+                left.distance_ext(right)
+            }
             (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::Point(right)) => {
                 left.distance_ext(right)
             }
@@ -1356,7 +1340,9 @@ where
                 left.distance_ext(right)
             }
 
-            // Cross-type combinations with MultiPolygon
+            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::MultiPolygon(right)) => {
+                left.distance_ext(right)
+            }
             (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Point(right)) => {
                 left.distance_ext(right)
             }
@@ -1381,8 +1367,6 @@ where
             (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::Rect(right)) => {
                 left.distance_ext(right)
             }
-
-            // Cross-type combinations with GeometryCollection
 
             // For all other combinations, convert to concrete geometry and use Euclidean implementation
             _ => {
