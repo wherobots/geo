@@ -685,10 +685,7 @@ where
 // └────────────────────────────────────────────────────────────┘
 
 // Symmetric Line distance implementations
-// Line-to-Coord (symmetric to Coord-to-Line)
 symmetric_distance_ext_trait_impl!(GeoFloat, LineTraitExt, LineTag, CoordTraitExt, CoordTag);
-
-// Line-to-Point (symmetric to Point-to-Line)
 symmetric_distance_ext_trait_impl!(GeoFloat, LineTraitExt, LineTag, PointTraitExt, PointTag);
 
 // Line-to-Line direct distance implementation
@@ -722,6 +719,69 @@ where
 {
     fn generic_distance_trait(&self, rhs: &Poly) -> F {
         distance_line_to_polygon_generic(self, rhs)
+    }
+}
+
+// Line to MultiPoint distance implementation
+impl<F, L, MP> GenericDistanceTrait<F, LineTag, MultiPointTag, MP> for L
+where
+    F: GeoFloat,
+    L: LineTraitExt<T = F>,
+    MP: MultiPointTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &MP) -> F {
+        let mut min_dist: F = Bounded::max_value();
+        for point in rhs.points_ext() {
+            let dist = self.distance_ext(&point);
+            min_dist = min_dist.min(dist);
+        }
+        if min_dist == Bounded::max_value() {
+            F::zero()
+        } else {
+            min_dist
+        }
+    }
+}
+
+// Line to MultiLineString distance implementation
+impl<F, L, MLS> GenericDistanceTrait<F, LineTag, MultiLineStringTag, MLS> for L
+where
+    F: GeoFloat,
+    L: LineTraitExt<T = F>,
+    MLS: MultiLineStringTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &MLS) -> F {
+        let mut min_dist: F = Bounded::max_value();
+        for linestring in rhs.line_strings_ext() {
+            let dist = self.distance_ext(&linestring);
+            min_dist = min_dist.min(dist);
+        }
+        if min_dist == Bounded::max_value() {
+            F::zero()
+        } else {
+            min_dist
+        }
+    }
+}
+
+// Line to MultiPolygon distance implementation
+impl<F, L, MPoly> GenericDistanceTrait<F, LineTag, MultiPolygonTag, MPoly> for L
+where
+    F: GeoFloat,
+    L: LineTraitExt<T = F>,
+    MPoly: MultiPolygonTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &MPoly) -> F {
+        let mut min_dist: F = Bounded::max_value();
+        for polygon in rhs.polygons_ext() {
+            let dist = self.distance_ext(&polygon);
+            min_dist = min_dist.min(dist);
+        }
+        if min_dist == Bounded::max_value() {
+            F::zero()
+        } else {
+            min_dist
+        }
     }
 }
 
@@ -918,29 +978,37 @@ where
 
         match (self.as_type_ext(), rhs.as_type_ext()) {
             // Same-type combinations
-            (GeometryTypeExt::Point(p1), GeometryTypeExt::Point(p2)) => p1.distance_ext(p2),
-            (GeometryTypeExt::Line(line1), GeometryTypeExt::Line(line2)) => { line1.distance_ext(line2) }
-            (GeometryTypeExt::LineString(ls1), GeometryTypeExt::LineString(ls2)) => { ls1.distance_ext(ls2) }
-            (GeometryTypeExt::Polygon(poly1), GeometryTypeExt::Polygon(poly2)) => { poly1.distance_ext(poly2) }
-            (GeometryTypeExt::MultiPoint(mp1), GeometryTypeExt::MultiPoint(mp2)) => { mp1.distance_ext(mp2) }
-            (GeometryTypeExt::MultiLineString(mls1), GeometryTypeExt::MultiLineString(mls2)) => { mls1.distance_ext(mls2) }
-            (GeometryTypeExt::MultiPolygon(mp1), GeometryTypeExt::MultiPolygon(mp2)) => { mp1.distance_ext(mp2) }
-            (GeometryTypeExt::Rect(rect1), GeometryTypeExt::Rect(rect2)) => { rect1.distance_ext(rect2) }
-            (GeometryTypeExt::Triangle(tri1), GeometryTypeExt::Triangle(tri2)) => { tri1.distance_ext(tri2) }
-            // (GeometryTypeExt::GeometryCollection(tri1), GeometryTypeExt::GeometryCollection(tri2)) => { tri1.distance_ext(tri2) }
+            (GeometryTypeExt::Point(left), GeometryTypeExt::Point(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Line(left), GeometryTypeExt::Line(right)) => { left.distance_ext(right) }
+            (GeometryTypeExt::LineString(left), GeometryTypeExt::LineString(right)) => { left.distance_ext(right) }
+            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Polygon(right)) => { left.distance_ext(right) }
+            (GeometryTypeExt::MultiPoint(left), GeometryTypeExt::MultiPoint(right)) => { left.distance_ext(right) }
+            (GeometryTypeExt::MultiLineString(left), GeometryTypeExt::MultiLineString(right)) => { left.distance_ext(right) }
+            (GeometryTypeExt::MultiPolygon(left), GeometryTypeExt::MultiPolygon(right)) => { left.distance_ext(right) }
+            (GeometryTypeExt::Rect(left), GeometryTypeExt::Rect(right)) => { left.distance_ext(right) }
+            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Triangle(right)) => { left.distance_ext(right) }
+            // (GeometryTypeExt::GeometryCollection(left), GeometryTypeExt::GeometryCollection(right)) => { left.distance_ext(right) }
 
             // Cross-type combinations with Point
-            (GeometryTypeExt::Point(p), GeometryTypeExt::Line(line)) => p.distance_ext(line),
-            (GeometryTypeExt::Point(p), GeometryTypeExt::LineString(ls)) => p.distance_ext(ls),
-            (GeometryTypeExt::Point(p), GeometryTypeExt::Polygon(poly)) => p.distance_ext(poly),
-            (GeometryTypeExt::Point(p), GeometryTypeExt::MultiPoint(line)) => p.distance_ext(line),
-            (GeometryTypeExt::Point(p), GeometryTypeExt::MultiLineString(line)) => p.distance_ext(line),
-            (GeometryTypeExt::Point(p), GeometryTypeExt::MultiPolygon(line)) => p.distance_ext(line),
-            (GeometryTypeExt::Point(p), GeometryTypeExt::Rect(line)) => p.distance_ext(line),
-            (GeometryTypeExt::Point(p), GeometryTypeExt::Triangle(line)) => p.distance_ext(line),
-
+            (GeometryTypeExt::Point(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Point(left), GeometryTypeExt::LineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Point(left), GeometryTypeExt::Polygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Point(left), GeometryTypeExt::MultiPoint(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Point(left), GeometryTypeExt::MultiLineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Point(left), GeometryTypeExt::MultiPolygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Point(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Point(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
 
             // Cross-type combinations with Line
+            (GeometryTypeExt::Line(left), GeometryTypeExt::Point(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Line(left), GeometryTypeExt::LineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Line(left), GeometryTypeExt::Polygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Line(left), GeometryTypeExt::MultiPoint(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Line(left), GeometryTypeExt::MultiLineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Line(left), GeometryTypeExt::MultiPolygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Line(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Line(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
+
             // Cross-type combinations with LineString
             // Cross-type combinations with Polygon
             // Cross-type combinations with MultiPoint
