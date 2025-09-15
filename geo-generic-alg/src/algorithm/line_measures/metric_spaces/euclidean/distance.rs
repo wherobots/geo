@@ -1,7 +1,7 @@
 use super::{Distance, Euclidean};
 use crate::algorithm::Intersects;
 use crate::geometry::*;
-use crate::{CoordFloat, GeoFloat};
+use crate::{Coord, CoordFloat, GeoFloat, Point};
 use geo_traits::to_geo::ToGeoGeometry;
 use num_traits::{Bounded, Float};
 
@@ -1108,6 +1108,36 @@ impl_cross_type_array!(symmetric_single_to_multi: TriangleTraitExt, TriangleTag 
 // │ Implementation for Geometry (generic traits)               │
 // └────────────────────────────────────────────────────────────┘
 
+// Generate implementations for Geometry with other types using conversion
+macro_rules! impl_distance_geometry_to_type {
+    ($rhs_type:ident, $rhs_tag:ident) => {
+        impl<F, LHS, RHS> GenericDistanceTrait<F, GeometryTag, $rhs_tag, RHS> for LHS
+        where
+            F: GeoFloat,
+            LHS: GeometryTraitExt<T = F>,
+            RHS: $rhs_type<T = F>,
+        {
+            fn generic_distance_trait(&self, rhs: &RHS) -> F {
+                // Convert both to concrete types and calculate distance
+                let geom = self.to_geometry();
+                let rhs_geom = rhs.to_geometry();
+                Euclidean.distance(&geom, &rhs_geom)
+            }
+        }
+    };
+}
+
+impl_distance_geometry_to_type!(PointTraitExt, PointTag);
+impl_distance_geometry_to_type!(LineTraitExt, LineTag);
+impl_distance_geometry_to_type!(LineStringTraitExt, LineStringTag);
+impl_distance_geometry_to_type!(PolygonTraitExt, PolygonTag);
+impl_distance_geometry_to_type!(MultiPointTraitExt, MultiPointTag);
+impl_distance_geometry_to_type!(MultiLineStringTraitExt, MultiLineStringTag);
+impl_distance_geometry_to_type!(MultiPolygonTraitExt, MultiPolygonTag);
+impl_distance_geometry_to_type!(RectTraitExt, RectTag);
+impl_distance_geometry_to_type!(TriangleTraitExt, TriangleTag);
+impl_distance_geometry_to_type!(GeometryCollectionTraitExt, GeometryCollectionTag);
+
 impl<F, G: GeometryTraitExt<T = F>> GenericDistanceTrait<F, GeometryTag, GeometryTag, G> for G
 where
     F: GeoFloat,
@@ -1144,9 +1174,143 @@ where
             MultiPoint => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
             MultiLineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
             MultiPolygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            GeometryCollection => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
         )
     }
 }
+
+// ┌────────────────────────────────────────────────────────────┐
+// │ Implementation for GeometryCollection (generic traits)     │
+// └────────────────────────────────────────────────────────────┘
+
+// Generate implementations for GeometryCollection by delegating to the Geometry implementation
+macro_rules! impl_distance_geometry_collection_from_geometry {
+    ($rhs_type:ident, $rhs_tag:ident) => {
+        impl<F, LHS, RHS> GenericDistanceTrait<F, GeometryCollectionTag, $rhs_tag, RHS> for LHS
+        where
+            F: GeoFloat,
+            LHS: GeometryCollectionTraitExt<T = F>,
+            RHS: $rhs_type<T = F>,
+        {
+            fn generic_distance_trait(&self, rhs: &RHS) -> F {
+                use num_traits::Bounded;
+
+                self.geometries_ext()
+                    .map(|geom| {
+                        // Convert both to concrete types and calculate distance
+                        let geom_concrete = geom.to_geometry();
+                        let rhs_concrete = rhs.to_geometry();
+                        Euclidean.distance(&geom_concrete, &rhs_concrete)
+                    })
+                    .fold(Bounded::max_value(), |acc, dist| acc.min(dist))
+            }
+        }
+    };
+}
+
+// Special implementation for CoordTraitExt which doesn't have to_geometry()
+impl<F, LHS, RHS> GenericDistanceTrait<F, GeometryCollectionTag, CoordTag, RHS> for LHS
+where
+    F: GeoFloat,
+    LHS: GeometryCollectionTraitExt<T = F>,
+    RHS: CoordTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &RHS) -> F {
+        use num_traits::Bounded;
+
+        let rhs_point = Point::from(rhs.geo_coord());
+        self.geometries_ext()
+            .map(|geom| {
+                let geom_concrete = geom.to_geometry();
+                Euclidean.distance(&geom_concrete, &rhs_point)
+            })
+            .fold(Bounded::max_value(), |acc, dist| acc.min(dist))
+    }
+}
+
+impl_distance_geometry_collection_from_geometry!(PointTraitExt, PointTag);
+impl_distance_geometry_collection_from_geometry!(LineTraitExt, LineTag);
+impl_distance_geometry_collection_from_geometry!(LineStringTraitExt, LineStringTag);
+impl_distance_geometry_collection_from_geometry!(PolygonTraitExt, PolygonTag);
+impl_distance_geometry_collection_from_geometry!(MultiPointTraitExt, MultiPointTag);
+impl_distance_geometry_collection_from_geometry!(MultiLineStringTraitExt, MultiLineStringTag);
+impl_distance_geometry_collection_from_geometry!(MultiPolygonTraitExt, MultiPolygonTag);
+impl_distance_geometry_collection_from_geometry!(RectTraitExt, RectTag);
+impl_distance_geometry_collection_from_geometry!(TriangleTraitExt, TriangleTag);
+impl_distance_geometry_collection_from_geometry!(GeometryTraitExt, GeometryTag);
+impl_distance_geometry_collection_from_geometry!(GeometryCollectionTraitExt, GeometryCollectionTag);
+
+// Symmetric implementations for GeometryCollection
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    CoordTraitExt,
+    CoordTag,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    PointTraitExt,
+    PointTag,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    LineTraitExt,
+    LineTag,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    LineStringTraitExt,
+    LineStringTag,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    PolygonTraitExt,
+    PolygonTag,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    MultiPointTraitExt,
+    MultiPointTag,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    MultiLineStringTraitExt,
+    MultiLineStringTag,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    MultiPolygonTraitExt,
+    MultiPolygonTag,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    RectTraitExt,
+    RectTag,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    TriangleTraitExt,
+    TriangleTag,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag
+);
 
 #[cfg(test)]
 mod tests {
