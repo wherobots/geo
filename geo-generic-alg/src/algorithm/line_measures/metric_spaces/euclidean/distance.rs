@@ -917,16 +917,6 @@ where
 // │ Implementations for Polygon (generic traits)              │
 // └────────────────────────────────────────────────────────────┘
 
-// Polygon-to-Polygon direct distance implementation
-impl<F, P: PolygonTraitExt<T = F>> GenericDistanceTrait<F, PolygonTag, PolygonTag, P> for P
-where
-    F: GeoFloat,
-{
-    fn generic_distance_trait(&self, rhs: &P) -> F {
-        distance_polygon_to_polygon_generic(self, rhs)
-    }
-}
-
 // Symmetric Polygon distance implementations
 // Polygon-to-Point (symmetric to Point-to-Polygon)
 symmetric_distance_ext_trait_impl!(
@@ -938,7 +928,13 @@ symmetric_distance_ext_trait_impl!(
 );
 
 // Polygon-to-Line (symmetric to Line-to-Polygon)
-symmetric_distance_ext_trait_impl!(GeoFloat, PolygonTraitExt, PolygonTag, LineTraitExt, LineTag);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    PolygonTraitExt,
+    PolygonTag,
+    LineTraitExt,
+    LineTag
+);
 
 // Polygon-to-LineString (symmetric to LineString-to-Polygon)
 symmetric_distance_ext_trait_impl!(
@@ -949,6 +945,82 @@ symmetric_distance_ext_trait_impl!(
     LineStringTag
 );
 
+// Polygon-to-Polygon distance implementation
+// This general implementation supports both same-type (P to P) and different-type (P1 to P2)
+impl<F, P1, P2> GenericDistanceTrait<F, PolygonTag, PolygonTag, P2> for P1
+where
+    F: GeoFloat,
+    P1: PolygonTraitExt<T = F>,
+    P2: PolygonTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &P2) -> F {
+        distance_polygon_to_polygon_generic(self, rhs)
+    }
+}
+
+// Polygon to MultiPoint distance implementation
+impl<F, P, MP> GenericDistanceTrait<F, PolygonTag, MultiPointTag, MP> for P
+where
+    F: GeoFloat,
+    P: PolygonTraitExt<T = F>,
+    MP: MultiPointTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &MP) -> F {
+        let mut min_dist: F = Bounded::max_value();
+        for point in rhs.points_ext() {
+            let dist = self.distance_ext(&point);
+            min_dist = min_dist.min(dist);
+        }
+        if min_dist == Bounded::max_value() {
+            F::zero()
+        } else {
+            min_dist
+        }
+    }
+}
+
+// Polygon to MultiLineString distance implementation
+impl<F, P, MLS> GenericDistanceTrait<F, PolygonTag, MultiLineStringTag, MLS> for P
+where
+    F: GeoFloat,
+    P: PolygonTraitExt<T = F>,
+    MLS: MultiLineStringTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &MLS) -> F {
+        let mut min_dist: F = Bounded::max_value();
+        for linestring in rhs.line_strings_ext() {
+            let dist = self.distance_ext(&linestring);
+            min_dist = min_dist.min(dist);
+        }
+        if min_dist == Bounded::max_value() {
+            F::zero()
+        } else {
+            min_dist
+        }
+    }
+}
+
+// Polygon to MultiPolygon distance implementation
+impl<F, P, MPoly> GenericDistanceTrait<F, PolygonTag, MultiPolygonTag, MPoly> for P
+where
+    F: GeoFloat,
+    P: PolygonTraitExt<T = F>,
+    MPoly: MultiPolygonTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &MPoly) -> F {
+        let mut min_dist: F = Bounded::max_value();
+        for polygon in rhs.polygons_ext() {
+            let dist = self.distance_ext(&polygon);
+            min_dist = min_dist.min(dist);
+        }
+        if min_dist == Bounded::max_value() {
+            F::zero()
+        } else {
+            min_dist
+        }
+    }
+}
+
 // ┌────────────────────────────────────────────────────────────┐
 // │ Implementations for Rect and Triangle (generic traits)     │
 // └────────────────────────────────────────────────────────────┘
@@ -957,12 +1029,7 @@ symmetric_distance_ext_trait_impl!(
 impl_distance_ext_for_polygonlike_geometry_trait!(TriangleTraitExt, TriangleTag, []);
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, PointTraitExt, PointTag);
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, LineTraitExt, LineTag);
-impl_polygonlike_to_geometry_distance!(
-    TriangleTraitExt,
-    TriangleTag,
-    LineStringTraitExt,
-    LineStringTag
-);
+impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, LineStringTraitExt, LineStringTag);
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, PolygonTraitExt, PolygonTag);
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, RectTraitExt, RectTag);
 
@@ -1086,12 +1153,20 @@ where
             (GeometryTypeExt::LineString(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
 
             // Cross-type combinations with Polygon
+            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Point(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Polygon(left), GeometryTypeExt::LineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Polygon(left), GeometryTypeExt::MultiPoint(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Polygon(left), GeometryTypeExt::MultiLineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Polygon(left), GeometryTypeExt::MultiPolygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Polygon(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
+
             // Cross-type combinations with MultiPoint
             // Cross-type combinations with MultiLineString
             // Cross-type combinations with MultiPolygon
             // Cross-type combinations with Triangle
             // Cross-type combinations with GeometryCollection
-
 
             // For all other combinations, convert to concrete geometry and use Euclidean implementation
             _ => {
