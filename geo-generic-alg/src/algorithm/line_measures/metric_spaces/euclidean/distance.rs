@@ -998,13 +998,6 @@ impl_cross_type_array!(self_multi_geometries: [
     (MultiPolygonTraitExt, MultiPolygonTag, polygons_ext)
 ]);
 
-// GeometryCollection self-implementation (uses existing impl_distance_ext_for_iter_geometry_trait)
-impl_distance_ext_for_iter_geometry_trait!(
-    GeometryCollectionTraitExt,
-    GeometryCollectionTag,
-    geometries_ext
-);
-
 // Single-geometry to multi-geometry implementations
 impl_cross_type_array!(single_to_multi: PointTraitExt, PointTag => [
     (MultiPointTraitExt, MultiPointTag, points_ext),
@@ -1151,7 +1144,6 @@ where
             MultiPoint => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
             MultiLineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
             MultiPolygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            GeometryCollection => [GeometryCollection],
         )
     }
 }
