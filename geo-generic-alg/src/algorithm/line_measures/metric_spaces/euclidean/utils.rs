@@ -19,11 +19,28 @@ use rstar::RTree;
 // └────────────────────────────────────────────────────────────┘
 
 /// Uses an R* tree and nearest-neighbour lookups to calculate minimum distances
+/// This implementation properly checks line-to-line distances and intersections
 pub fn nearest_neighbour_distance<F: GeoFloat>(geom1: &LineString<F>, geom2: &LineString<F>) -> F {
     let tree_a = RTree::bulk_load(geom1.lines().map(CachedEnvelope::new).collect());
     let tree_b = RTree::bulk_load(geom2.lines().map(CachedEnvelope::new).collect());
-    // Return minimum distance between all geom a points and geom b lines, and all geom b points and geom a lines
-    geom2
+
+    // First check all line-to-line distances/intersections
+    let mut min_distance: F = Bounded::max_value();
+
+    for line1 in geom1.lines() {
+        for line2 in geom2.lines() {
+            let line_distance = distance_line_to_line_generic(&line1, &line2);
+            min_distance = min_distance.min(line_distance);
+
+            // Early exit if we found an intersection
+            if line_distance == F::zero() {
+                return F::zero();
+            }
+        }
+    }
+
+    // Also check point-to-line distances (for completeness)
+    let point_line_dist = geom2
         .points()
         .fold(Bounded::max_value(), |acc: F, point| {
             let nearest = tree_a.nearest_neighbor(&point).unwrap();
@@ -32,7 +49,9 @@ pub fn nearest_neighbour_distance<F: GeoFloat>(geom1: &LineString<F>, geom2: &Li
         .min(geom1.points().fold(Bounded::max_value(), |acc, point| {
             let nearest = tree_b.nearest_neighbor(&point).unwrap();
             acc.min(Euclidean.distance(nearest as &Line<F>, &point))
-        }))
+        }));
+
+    min_distance.min(point_line_dist)
 }
 
 pub fn ring_contains_coord<T: GeoNum>(ring: &LineString<T>, c: Coord<T>) -> bool {
@@ -193,15 +212,16 @@ where
     if let Some(exterior) = polygon.exterior_ext() {
         let mut min_dist: F = Float::max_value();
 
-        // Calculate distance to exterior ring
+        // Calculate distance to exterior ring using proper line-to-line distance
         for line1 in linestring.lines() {
             for line2 in exterior.lines() {
-                let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
-                let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
-                let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
-                let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
-                let line_dist = d1.min(d2).min(d3).min(d4);
+                let line_dist = distance_line_to_line_generic(&line1, &line2);
                 min_dist = min_dist.min(line_dist);
+
+                // Early exit if we found an intersection
+                if line_dist == F::zero() {
+                    return F::zero();
+                }
             }
         }
 
@@ -209,12 +229,13 @@ where
         for interior in polygon.interiors_ext() {
             for line1 in linestring.lines() {
                 for line2 in interior.lines() {
-                    let d1 = line_segment_distance_generic(&line1.start_coord(), &line2);
-                    let d2 = line_segment_distance_generic(&line1.end_coord(), &line2);
-                    let d3 = line_segment_distance_generic(&line2.start_coord(), &line1);
-                    let d4 = line_segment_distance_generic(&line2.end_coord(), &line1);
-                    let line_dist = d1.min(d2).min(d3).min(d4);
+                    let line_dist = distance_line_to_line_generic(&line1, &line2);
                     min_dist = min_dist.min(line_dist);
+
+                    // Early exit if we found an intersection
+                    if line_dist == F::zero() {
+                        return F::zero();
+                    }
                 }
             }
         }
@@ -581,7 +602,8 @@ mod tests {
         let ls2 = LineString::from(vec![(2.0, -1.0), (2.0, 1.0)]);
 
         let distance = nearest_neighbour_distance(&ls1, &ls2);
-        assert_relative_eq!(distance, 1.0);
+        // The linestrings intersect at (2,0), so distance should be 0.0
+        assert_relative_eq!(distance, 0.0);
     }
 
     #[test]
@@ -610,7 +632,11 @@ mod tests {
     #[test]
     fn test_ring_contains_coord_inside() {
         let ring = LineString::from(vec![
-            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (0.0, 0.0),
         ]);
         let coord = coord! { x: 2.0, y: 2.0 };
 
@@ -620,7 +646,11 @@ mod tests {
     #[test]
     fn test_ring_contains_coord_outside() {
         let ring = LineString::from(vec![
-            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (0.0, 0.0),
         ]);
         let coord = coord! { x: 5.0, y: 2.0 };
 
@@ -630,7 +660,11 @@ mod tests {
     #[test]
     fn test_ring_contains_coord_on_boundary() {
         let ring = LineString::from(vec![
-            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (0.0, 0.0),
         ]);
         let coord = coord! { x: 2.0, y: 0.0 };
 
@@ -639,9 +673,7 @@ mod tests {
 
     #[test]
     fn test_ring_contains_coord_triangle() {
-        let ring = LineString::from(vec![
-            (0.0, 0.0), (3.0, 0.0), (1.5, 2.0), (0.0, 0.0)
-        ]);
+        let ring = LineString::from(vec![(0.0, 0.0), (3.0, 0.0), (1.5, 2.0), (0.0, 0.0)]);
         let inside_coord = coord! { x: 1.5, y: 0.5 };
         let outside_coord = coord! { x: 3.0, y: 3.0 };
 
@@ -696,7 +728,11 @@ mod tests {
     #[test]
     fn test_distance_point_to_polygon_generic_outside() {
         let exterior = LineString::from(vec![
-            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (0.0, 0.0),
         ]);
         let polygon = Polygon::new(exterior, vec![]);
         let point = Point::new(6.0, 2.0);
@@ -708,7 +744,11 @@ mod tests {
     #[test]
     fn test_distance_point_to_polygon_generic_inside() {
         let exterior = LineString::from(vec![
-            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (0.0, 0.0),
         ]);
         let polygon = Polygon::new(exterior, vec![]);
         let point = Point::new(2.0, 2.0);
@@ -720,7 +760,11 @@ mod tests {
     #[test]
     fn test_distance_point_to_polygon_generic_on_boundary() {
         let exterior = LineString::from(vec![
-            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (0.0, 0.0),
         ]);
         let polygon = Polygon::new(exterior, vec![]);
         let point = Point::new(2.0, 0.0);
@@ -732,10 +776,18 @@ mod tests {
     #[test]
     fn test_distance_point_to_polygon_generic_with_hole() {
         let exterior = LineString::from(vec![
-            (0.0, 0.0), (6.0, 0.0), (6.0, 6.0), (0.0, 6.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (6.0, 0.0),
+            (6.0, 6.0),
+            (0.0, 6.0),
+            (0.0, 0.0),
         ]);
         let interior = LineString::from(vec![
-            (2.0, 2.0), (4.0, 2.0), (4.0, 4.0), (2.0, 4.0), (2.0, 2.0)
+            (2.0, 2.0),
+            (4.0, 2.0),
+            (4.0, 4.0),
+            (2.0, 4.0),
+            (2.0, 2.0),
         ]);
         let polygon = Polygon::new(exterior, vec![interior]);
         let point = Point::new(3.0, 3.0); // Inside the hole
@@ -792,7 +844,11 @@ mod tests {
     #[test]
     fn test_distance_linestring_to_polygon_generic_outside() {
         let exterior = LineString::from(vec![
-            (0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (2.0, 0.0),
+            (2.0, 2.0),
+            (0.0, 2.0),
+            (0.0, 0.0),
         ]);
         let polygon = Polygon::new(exterior, vec![]);
         let linestring = LineString::from(vec![(3.0, 0.0), (4.0, 1.0)]);
@@ -804,15 +860,18 @@ mod tests {
     #[test]
     fn test_distance_linestring_to_polygon_generic_intersecting() {
         let exterior = LineString::from(vec![
-            (0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (2.0, 0.0),
+            (2.0, 2.0),
+            (0.0, 2.0),
+            (0.0, 0.0),
         ]);
         let polygon = Polygon::new(exterior, vec![]);
         let linestring = LineString::from(vec![(-1.0, 1.0), (3.0, 1.0)]);
 
         let distance = distance_linestring_to_polygon_generic(&linestring, &polygon);
-        // The algorithm computes minimum distance between line segments
-        // For this configuration, the result is 1.0 (minimum distance between segments)
-        assert_relative_eq!(distance, 1.0);
+        // The linestring intersects the polygon, so distance should be 0.0
+        assert_relative_eq!(distance, 0.0);
     }
 
     #[test]
@@ -831,12 +890,20 @@ mod tests {
     #[test]
     fn test_distance_polygon_to_polygon_generic_separate() {
         let exterior1 = LineString::from(vec![
-            (0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (2.0, 0.0),
+            (2.0, 2.0),
+            (0.0, 2.0),
+            (0.0, 0.0),
         ]);
         let polygon1 = Polygon::new(exterior1, vec![]);
 
         let exterior2 = LineString::from(vec![
-            (4.0, 0.0), (6.0, 0.0), (6.0, 2.0), (4.0, 2.0), (4.0, 0.0)
+            (4.0, 0.0),
+            (6.0, 0.0),
+            (6.0, 2.0),
+            (4.0, 2.0),
+            (4.0, 0.0),
         ]);
         let polygon2 = Polygon::new(exterior2, vec![]);
 
@@ -847,12 +914,20 @@ mod tests {
     #[test]
     fn test_distance_polygon_to_polygon_generic_intersecting() {
         let exterior1 = LineString::from(vec![
-            (0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (3.0, 0.0),
+            (3.0, 3.0),
+            (0.0, 3.0),
+            (0.0, 0.0),
         ]);
         let polygon1 = Polygon::new(exterior1, vec![]);
 
         let exterior2 = LineString::from(vec![
-            (1.0, 1.0), (4.0, 1.0), (4.0, 4.0), (1.0, 4.0), (1.0, 1.0)
+            (1.0, 1.0),
+            (4.0, 1.0),
+            (4.0, 4.0),
+            (1.0, 4.0),
+            (1.0, 1.0),
         ]);
         let polygon2 = Polygon::new(exterior2, vec![]);
 
@@ -863,15 +938,27 @@ mod tests {
     #[test]
     fn test_distance_polygon_to_polygon_generic_one_in_others_hole() {
         let exterior = LineString::from(vec![
-            (0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (10.0, 0.0),
+            (10.0, 10.0),
+            (0.0, 10.0),
+            (0.0, 0.0),
         ]);
         let interior = LineString::from(vec![
-            (2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0), (2.0, 2.0)
+            (2.0, 2.0),
+            (8.0, 2.0),
+            (8.0, 8.0),
+            (2.0, 8.0),
+            (2.0, 2.0),
         ]);
         let polygon_with_hole = Polygon::new(exterior, vec![interior]);
 
         let small_exterior = LineString::from(vec![
-            (4.0, 4.0), (6.0, 4.0), (6.0, 6.0), (4.0, 6.0), (4.0, 4.0)
+            (4.0, 4.0),
+            (6.0, 4.0),
+            (6.0, 6.0),
+            (4.0, 6.0),
+            (4.0, 4.0),
         ]);
         let small_polygon = Polygon::new(small_exterior, vec![]);
 
@@ -899,7 +986,11 @@ mod tests {
     fn test_symmetric_distance_point_polygon() {
         let point = Point::new(5.0, 2.0);
         let exterior = LineString::from(vec![
-            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (0.0, 0.0),
         ]);
         let polygon = Polygon::new(exterior, vec![]);
 
@@ -914,7 +1005,11 @@ mod tests {
     fn test_symmetric_distance_linestring_polygon() {
         let linestring = LineString::from(vec![(5.0, 1.0), (6.0, 2.0)]);
         let exterior = LineString::from(vec![
-            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (0.0, 0.0),
         ]);
         let polygon = Polygon::new(exterior, vec![]);
 
@@ -942,7 +1037,11 @@ mod tests {
     fn test_distance_line_to_polygon_generic() {
         let line = Line::new(coord! { x: 5.0, y: 1.0 }, coord! { x: 6.0, y: 2.0 });
         let exterior = LineString::from(vec![
-            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (0.0, 0.0),
         ]);
         let polygon = Polygon::new(exterior, vec![]);
 
@@ -959,7 +1058,7 @@ mod tests {
         let triangle = Triangle::new(
             coord! { x: 0.0, y: 0.0 },
             coord! { x: 3.0, y: 0.0 },
-            coord! { x: 1.5, y: 3.0 }
+            coord! { x: 1.5, y: 3.0 },
         );
         let point = Point::new(1.5, 1.0); // Inside triangle
 
@@ -972,7 +1071,7 @@ mod tests {
         let triangle = Triangle::new(
             coord! { x: 0.0, y: 0.0 },
             coord! { x: 3.0, y: 0.0 },
-            coord! { x: 1.5, y: 3.0 }
+            coord! { x: 1.5, y: 3.0 },
         );
         let point = Point::new(5.0, 0.0); // Outside triangle
 
@@ -1044,7 +1143,7 @@ mod tests {
         // Create line from p1 to p2
         let line_seg = Line::new(
             coord! { x: p1.x(), y: p1.y() },
-            coord! { x: p2.x(), y: p2.y() }
+            coord! { x: p2.x(), y: p2.y() },
         );
 
         if let Some(o1_coord) = o1.coord_ext() {
@@ -1052,6 +1151,349 @@ mod tests {
 
             // This should match the expected value from the original test
             assert_relative_eq!(generic_dist, 2.0485900789263356, epsilon = 1e-10);
+        }
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Property-based tests with random inputs                    │
+    // └────────────────────────────────────────────────────────────┘
+
+    fn generate_random_point(seed: u64) -> Point<f64> {
+        // Simple LCG for deterministic "random" numbers
+        let mut rng = seed;
+        rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+        let x = ((rng >> 16) as i16) as f64 * 0.001;
+        rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+        let y = ((rng >> 16) as i16) as f64 * 0.001;
+        Point::new(x, y)
+    }
+
+    fn generate_random_line(seed: u64) -> Line<f64> {
+        let mut rng = seed;
+        rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+        let x1 = ((rng >> 16) as i16) as f64 * 0.001;
+        rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+        let y1 = ((rng >> 16) as i16) as f64 * 0.001;
+        rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+        let x2 = ((rng >> 16) as i16) as f64 * 0.001;
+        rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+        let y2 = ((rng >> 16) as i16) as f64 * 0.001;
+        Line::new(coord! { x: x1, y: y1 }, coord! { x: x2, y: y2 })
+    }
+
+    fn generate_random_linestring(seed: u64, num_points: usize) -> LineString<f64> {
+        let mut rng = seed;
+        let mut points = Vec::new();
+        for _ in 0..num_points {
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            let x = ((rng >> 16) as i16) as f64 * 0.001;
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            let y = ((rng >> 16) as i16) as f64 * 0.001;
+            points.push((x, y));
+        }
+        LineString::from(points)
+    }
+
+    fn generate_random_polygon(seed: u64, num_exterior_points: usize) -> Polygon<f64> {
+        let mut rng = seed;
+        let mut points = Vec::new();
+
+        // Generate points around a circle to ensure a valid polygon
+        let center_x = 0.0;
+        let center_y = 0.0;
+        let radius = 10.0;
+
+        for i in 0..num_exterior_points {
+            let angle = 2.0 * std::f64::consts::PI * i as f64 / num_exterior_points as f64;
+            // Add some random noise
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            let noise = ((rng >> 16) as i16) as f64 * 0.0001;
+            let x = center_x + (radius + noise) * angle.cos();
+            let y = center_y + (radius + noise) * angle.sin();
+            points.push((x, y));
+        }
+
+        // Close the polygon
+        if !points.is_empty() {
+            points.push(points[0]);
+        }
+
+        Polygon::new(LineString::from(points), vec![])
+    }
+
+    #[test]
+    fn test_random_point_to_point_distance() {
+        // Test point-to-point distance with random inputs
+        for i in 0..100 {
+            let seed1 = 12345 + i * 17;
+            let seed2 = 54321 + i * 23;
+
+            let p1 = generate_random_point(seed1);
+            let p2 = generate_random_point(seed2);
+
+            let concrete_dist = Euclidean.distance(&p1, &p2);
+            let generic_dist = point_distance_generic(&p1, &p2);
+
+            assert_relative_eq!(
+                concrete_dist,
+                generic_dist,
+                epsilon = 1e-12,
+                max_relative = 1e-12
+            );
+        }
+    }
+
+    #[test]
+    fn test_random_point_to_linestring_distance() {
+        // Test point-to-linestring distance with random inputs
+        for i in 0..100 {
+            let seed1 = 11111 + i * 31;
+            let seed2 = 22222 + i * 37;
+
+            let point = generate_random_point(seed1);
+            let linestring = generate_random_linestring(seed2, 3 + (i % 5) as usize); // 3-7 points
+
+            let concrete_dist = Euclidean.distance(&point, &linestring);
+            let generic_dist = distance_point_to_linestring_generic(&point, &linestring);
+
+            assert_relative_eq!(
+                concrete_dist,
+                generic_dist,
+                epsilon = 1e-12,
+                max_relative = 1e-12
+            );
+        }
+    }
+
+    #[test]
+    fn test_random_point_to_polygon_distance() {
+        // Test point-to-polygon distance with random inputs
+        for i in 0..100 {
+            let seed1 = 33333 + i * 41;
+            let seed2 = 44444 + i * 43;
+
+            let point = generate_random_point(seed1);
+            let polygon = generate_random_polygon(seed2, 4 + (i % 4) as usize); // 4-7 sides
+
+            let concrete_dist = Euclidean.distance(&point, &polygon);
+            let generic_dist = distance_point_to_polygon_generic(&point, &polygon);
+
+            assert_relative_eq!(
+                concrete_dist,
+                generic_dist,
+                epsilon = 1e-10,
+                max_relative = 1e-10
+            );
+        }
+    }
+
+    #[test]
+    fn test_random_line_to_line_distance() {
+        // Test line-to-line distance with random inputs
+        for i in 0..100 {
+            let seed1 = 55555 + i * 47;
+            let seed2 = 66666 + i * 53;
+
+            let line1 = generate_random_line(seed1);
+            let line2 = generate_random_line(seed2);
+
+            let concrete_dist = Euclidean.distance(&line1, &line2);
+            let generic_dist = distance_line_to_line_generic(&line1, &line2);
+
+            assert_relative_eq!(
+                concrete_dist,
+                generic_dist,
+                epsilon = 1e-12,
+                max_relative = 1e-12
+            );
+        }
+    }
+
+    #[test]
+    fn test_random_linestring_to_linestring_distance() {
+        // Test linestring-to-linestring distance with random inputs
+        for i in 0..100 {
+            let seed1 = 77777 + i * 59;
+            let seed2 = 88888 + i * 61;
+
+            let ls1 = generate_random_linestring(seed1, 3 + (i % 3) as usize); // 3-5 points
+            let ls2 = generate_random_linestring(seed2, 3 + ((i + 1) % 3) as usize); // 3-5 points
+
+            let concrete_dist = Euclidean.distance(&ls1, &ls2);
+            // Use our actual generic implementation via nearest_neighbour_distance
+            let generic_dist = nearest_neighbour_distance(&ls1, &ls2);
+
+            assert_relative_eq!(
+                concrete_dist,
+                generic_dist,
+                epsilon = 1e-10,
+                max_relative = 1e-10
+            );
+        }
+    }
+
+    #[test]
+    fn test_random_polygon_to_polygon_distance() {
+        // Test polygon-to-polygon distance with random inputs
+        for i in 0..100 {
+            let seed1 = 99999 + i * 67;
+            let seed2 = 10101 + i * 71;
+
+            let poly1 = generate_random_polygon(seed1, 4 + (i % 3) as usize); // 4-6 sides
+            let poly2 = generate_random_polygon(seed2, 4 + ((i + 1) % 3) as usize); // 4-6 sides
+
+            let concrete_dist = Euclidean.distance(&poly1, &poly2);
+            let generic_dist = distance_polygon_to_polygon_generic(&poly1, &poly2);
+
+            assert_relative_eq!(
+                concrete_dist,
+                generic_dist,
+                epsilon = 1e-8,
+                max_relative = 1e-8
+            );
+        }
+    }
+
+    #[test]
+    fn test_random_line_to_polygon_distance() {
+        // Test line-to-polygon distance with random inputs
+        for i in 0..100 {
+            let seed1 = 12121 + i * 73;
+            let seed2 = 13131 + i * 79;
+
+            let line = generate_random_line(seed1);
+            let polygon = generate_random_polygon(seed2, 4 + (i % 3) as usize); // 4-6 sides
+
+            let concrete_dist = Euclidean.distance(&line, &polygon);
+            let generic_dist = distance_line_to_polygon_generic(&line, &polygon);
+
+            assert_relative_eq!(
+                concrete_dist,
+                generic_dist,
+                epsilon = 1e-10,
+                max_relative = 1e-10
+            );
+        }
+    }
+
+    #[test]
+    fn test_random_linestring_to_polygon_distance() {
+        // Test linestring-to-polygon distance with random inputs
+        for i in 0..100 {
+            let seed1 = 14141 + i * 83;
+            let seed2 = 15151 + i * 89;
+
+            let linestring = generate_random_linestring(seed1, 3 + (i % 3) as usize); // 3-5 points
+            let polygon = generate_random_polygon(seed2, 4 + (i % 3) as usize); // 4-6 sides
+
+            let concrete_dist = Euclidean.distance(&linestring, &polygon);
+            let generic_dist = distance_linestring_to_polygon_generic(&linestring, &polygon);
+
+            assert_relative_eq!(
+                concrete_dist,
+                generic_dist,
+                epsilon = 1e-8,
+                max_relative = 1e-8
+            );
+        }
+    }
+
+    #[test]
+    fn test_random_symmetry_properties() {
+        // Test symmetry properties with random inputs
+        for i in 0..100 {
+            let seed1 = 16161 + i * 97;
+            let seed2 = 17171 + i * 101;
+
+            let point = generate_random_point(seed1);
+            let linestring = generate_random_linestring(seed2, 4);
+
+            // Test point-linestring symmetry
+            let dist1 = distance_point_to_linestring_generic(&point, &linestring);
+            let dist2 = distance_linestring_to_point_generic(&linestring, &point);
+            assert_relative_eq!(dist1, dist2, epsilon = 1e-12);
+
+            // Test with polygon
+            if i % 2 == 0 {
+                let polygon = generate_random_polygon(seed1 + seed2, 5);
+                let dist3 = distance_point_to_polygon_generic(&point, &polygon);
+                let dist4 = distance_polygon_to_point_generic(&polygon, &point);
+                assert_relative_eq!(dist3, dist4, epsilon = 1e-10);
+            }
+        }
+    }
+
+    #[test]
+    fn test_random_edge_cases_and_boundaries() {
+        // Test edge cases with specific patterns
+        for i in 0..100 {
+            // Same point distance should be zero
+            let point = generate_random_point(12345 + i);
+            let same_point_dist = point_distance_generic(&point, &point);
+            assert_relative_eq!(same_point_dist, 0.0);
+
+            // Zero-length line segment
+            let coord = coord! { x: point.x(), y: point.y() };
+            let zero_line = Line::new(coord, coord);
+            let dist_to_zero_line = line_segment_distance_generic(&coord, &zero_line);
+            assert_relative_eq!(dist_to_zero_line, 0.0);
+
+            // Point on line segment should have zero distance
+            let seed = 54321 + i * 13;
+            let line = generate_random_line(seed);
+            let start_coord = line.start_coord();
+            let dist_to_start = line_segment_distance_generic(&start_coord, &line);
+            assert_relative_eq!(dist_to_start, 0.0, epsilon = 1e-12);
+        }
+    }
+
+    #[test]
+    fn test_random_large_coordinates() {
+        // Test with large coordinate values to check numerical stability
+        for i in 0..100 {
+            let mut rng: u64 = 98765 + i * 107;
+
+            // Generate large coordinates
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            let scale = 1e6 + (rng % 1000000) as f64;
+
+            let p1 = Point::new(scale, scale * 0.5);
+            let p2 = Point::new(scale * 1.1, scale * 0.7);
+
+            let concrete_dist = Euclidean.distance(&p1, &p2);
+            let generic_dist = point_distance_generic(&p1, &p2);
+
+            assert_relative_eq!(
+                concrete_dist,
+                generic_dist,
+                epsilon = 1e-10,
+                max_relative = 1e-10
+            );
+        }
+    }
+
+    #[test]
+    fn test_random_small_coordinates() {
+        // Test with very small coordinate values to check numerical precision
+        for i in 0..100 {
+            let mut rng: u64 = 13579 + i * 109;
+
+            // Generate small coordinates
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            let scale = 1e-6 * (1.0 + (rng % 100) as f64 * 0.01);
+
+            let p1 = Point::new(scale, scale * 0.5);
+            let p2 = Point::new(scale * 1.1, scale * 0.7);
+
+            let concrete_dist = Euclidean.distance(&p1, &p2);
+            let generic_dist = point_distance_generic(&p1, &p2);
+
+            assert_relative_eq!(
+                concrete_dist,
+                generic_dist,
+                epsilon = 1e-15,
+                max_relative = 1e-12
+            );
         }
     }
 }
