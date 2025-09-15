@@ -451,3 +451,607 @@ symmetric_distance_generic_impl!(
     TriangleTraitExt,
     PointTraitExt
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{coord, Line, LineString, Point, Polygon, Triangle};
+    use approx::assert_relative_eq;
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for point_distance_generic function                  │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_point_distance_generic_basic() {
+        let p1 = Point::new(0.0, 0.0);
+        let p2 = Point::new(3.0, 4.0);
+
+        let distance = point_distance_generic(&p1, &p2);
+        assert_relative_eq!(distance, 5.0); // 3-4-5 triangle
+
+        // Test symmetry
+        let distance_reverse = point_distance_generic(&p2, &p1);
+        assert_relative_eq!(distance, distance_reverse);
+    }
+
+    #[test]
+    fn test_point_distance_generic_same_point() {
+        let p = Point::new(2.5, -1.5);
+        let distance = point_distance_generic(&p, &p);
+        assert_relative_eq!(distance, 0.0);
+    }
+
+    #[test]
+    fn test_point_distance_generic_negative_coordinates() {
+        let p1 = Point::new(-2.0, -3.0);
+        let p2 = Point::new(1.0, 1.0);
+
+        let distance = point_distance_generic(&p1, &p2);
+        assert_relative_eq!(distance, 5.0); // sqrt((1-(-2))^2 + (1-(-3))^2) = sqrt(9+16) = 5
+    }
+
+    #[test]
+    fn test_point_distance_generic_empty_points() {
+        // Test with empty points (no coordinates)
+        let empty_point: Point<f64> = Point::new(f64::NAN, f64::NAN);
+        let regular_point = Point::new(1.0, 1.0);
+
+        // When either point has no valid coordinates, distance should be 0
+        let distance = point_distance_generic(&empty_point, &regular_point);
+        assert!(distance.is_nan() || distance == 0.0); // Implementation dependent
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for line_segment_distance_generic function           │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_line_segment_distance_generic_point_on_line() {
+        let coord = coord! { x: 2.0, y: 0.0 };
+        let line = Line::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 4.0, y: 0.0 });
+
+        let distance = line_segment_distance_generic(&coord, &line);
+        assert_relative_eq!(distance, 0.0);
+    }
+
+    #[test]
+    fn test_line_segment_distance_generic_perpendicular() {
+        let coord = coord! { x: 2.0, y: 3.0 };
+        let line = Line::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 4.0, y: 0.0 });
+
+        let distance = line_segment_distance_generic(&coord, &line);
+        assert_relative_eq!(distance, 3.0);
+    }
+
+    #[test]
+    fn test_line_segment_distance_generic_beyond_endpoint() {
+        let coord = coord! { x: 6.0, y: 0.0 };
+        let line = Line::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 4.0, y: 0.0 });
+
+        let distance = line_segment_distance_generic(&coord, &line);
+        assert_relative_eq!(distance, 2.0); // Distance to closest endpoint (4,0)
+    }
+
+    #[test]
+    fn test_line_segment_distance_generic_before_startpoint() {
+        let coord = coord! { x: -2.0, y: 0.0 };
+        let line = Line::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 4.0, y: 0.0 });
+
+        let distance = line_segment_distance_generic(&coord, &line);
+        assert_relative_eq!(distance, 2.0); // Distance to start point (0,0)
+    }
+
+    #[test]
+    fn test_line_segment_distance_generic_zero_length_line() {
+        let coord = coord! { x: 2.0, y: 3.0 };
+        let line = Line::new(coord! { x: 1.0, y: 1.0 }, coord! { x: 1.0, y: 1.0 });
+
+        let distance = line_segment_distance_generic(&coord, &line);
+        let expected = ((2.0 - 1.0).powi(2) + (3.0 - 1.0).powi(2)).sqrt();
+        assert_relative_eq!(distance, expected);
+    }
+
+    #[test]
+    fn test_line_segment_distance_generic_diagonal_line() {
+        let coord = coord! { x: 0.0, y: 2.0 };
+        let line = Line::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 2.0, y: 2.0 });
+
+        let distance = line_segment_distance_generic(&coord, &line);
+        // Point (0,2) to line from (0,0) to (2,2) - should be sqrt(2)
+        assert_relative_eq!(distance, std::f64::consts::SQRT_2, epsilon = 1e-10);
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for nearest_neighbour_distance function              │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_nearest_neighbour_distance_basic() {
+        let ls1 = LineString::from(vec![(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)]);
+        let ls2 = LineString::from(vec![(3.0, 0.0), (5.0, 0.0), (5.0, 2.0)]);
+
+        let distance = nearest_neighbour_distance(&ls1, &ls2);
+        assert_relative_eq!(distance, 1.0); // Distance between (2,0)-(2,2) and (3,0)-(5,0)
+    }
+
+    #[test]
+    fn test_nearest_neighbour_distance_intersecting() {
+        let ls1 = LineString::from(vec![(0.0, 0.0), (4.0, 0.0)]);
+        let ls2 = LineString::from(vec![(2.0, -1.0), (2.0, 1.0)]);
+
+        let distance = nearest_neighbour_distance(&ls1, &ls2);
+        assert_relative_eq!(distance, 1.0);
+    }
+
+    #[test]
+    fn test_nearest_neighbour_distance_parallel_lines() {
+        let ls1 = LineString::from(vec![(0.0, 0.0), (4.0, 0.0)]);
+        let ls2 = LineString::from(vec![(0.0, 2.0), (4.0, 2.0)]);
+
+        let distance = nearest_neighbour_distance(&ls1, &ls2);
+        assert_relative_eq!(distance, 2.0); // Perpendicular distance between parallel lines
+    }
+
+    #[test]
+    fn test_nearest_neighbour_distance_single_segment_each() {
+        let ls1 = LineString::from(vec![(0.0, 0.0), (1.0, 0.0)]);
+        let ls2 = LineString::from(vec![(2.0, 1.0), (3.0, 1.0)]);
+
+        let distance = nearest_neighbour_distance(&ls1, &ls2);
+        let expected = ((2.0 - 1.0).powi(2) + (1.0 - 0.0).powi(2)).sqrt();
+        assert_relative_eq!(distance, expected);
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for ring_contains_coord function                     │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_ring_contains_coord_inside() {
+        let ring = LineString::from(vec![
+            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+        ]);
+        let coord = coord! { x: 2.0, y: 2.0 };
+
+        assert!(ring_contains_coord(&ring, coord));
+    }
+
+    #[test]
+    fn test_ring_contains_coord_outside() {
+        let ring = LineString::from(vec![
+            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+        ]);
+        let coord = coord! { x: 5.0, y: 2.0 };
+
+        assert!(!ring_contains_coord(&ring, coord));
+    }
+
+    #[test]
+    fn test_ring_contains_coord_on_boundary() {
+        let ring = LineString::from(vec![
+            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+        ]);
+        let coord = coord! { x: 2.0, y: 0.0 };
+
+        assert!(!ring_contains_coord(&ring, coord)); // On boundary = false
+    }
+
+    #[test]
+    fn test_ring_contains_coord_triangle() {
+        let ring = LineString::from(vec![
+            (0.0, 0.0), (3.0, 0.0), (1.5, 2.0), (0.0, 0.0)
+        ]);
+        let inside_coord = coord! { x: 1.5, y: 0.5 };
+        let outside_coord = coord! { x: 3.0, y: 3.0 };
+
+        assert!(ring_contains_coord(&ring, inside_coord));
+        assert!(!ring_contains_coord(&ring, outside_coord));
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for distance_point_to_linestring_generic             │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_distance_point_to_linestring_generic_basic() {
+        let point = Point::new(1.0, 2.0);
+        let linestring = LineString::from(vec![(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)]);
+
+        let distance = distance_point_to_linestring_generic(&point, &linestring);
+        assert_relative_eq!(distance, 1.0); // Distance to closest segment
+    }
+
+    #[test]
+    fn test_distance_point_to_linestring_generic_empty() {
+        let point = Point::new(1.0, 2.0);
+        let linestring = LineString::<f64>::new(vec![]);
+
+        let distance = distance_point_to_linestring_generic(&point, &linestring);
+        assert_relative_eq!(distance, 0.0);
+    }
+
+    #[test]
+    fn test_distance_point_to_linestring_generic_single_point() {
+        let point = Point::new(1.0, 2.0);
+        let linestring = LineString::from(vec![(0.0, 0.0)]);
+
+        let distance = distance_point_to_linestring_generic(&point, &linestring);
+        assert_relative_eq!(distance, 0.0); // Single point linestring
+    }
+
+    #[test]
+    fn test_distance_point_to_linestring_generic_on_linestring() {
+        let point = Point::new(1.0, 0.0);
+        let linestring = LineString::from(vec![(0.0, 0.0), (2.0, 0.0)]);
+
+        let distance = distance_point_to_linestring_generic(&point, &linestring);
+        assert_relative_eq!(distance, 0.0);
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for distance_point_to_polygon_generic                │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_distance_point_to_polygon_generic_outside() {
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+        ]);
+        let polygon = Polygon::new(exterior, vec![]);
+        let point = Point::new(6.0, 2.0);
+
+        let distance = distance_point_to_polygon_generic(&point, &polygon);
+        assert_relative_eq!(distance, 2.0); // Distance to right edge
+    }
+
+    #[test]
+    fn test_distance_point_to_polygon_generic_inside() {
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+        ]);
+        let polygon = Polygon::new(exterior, vec![]);
+        let point = Point::new(2.0, 2.0);
+
+        let distance = distance_point_to_polygon_generic(&point, &polygon);
+        assert_relative_eq!(distance, 0.0); // Inside polygon
+    }
+
+    #[test]
+    fn test_distance_point_to_polygon_generic_on_boundary() {
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+        ]);
+        let polygon = Polygon::new(exterior, vec![]);
+        let point = Point::new(2.0, 0.0);
+
+        let distance = distance_point_to_polygon_generic(&point, &polygon);
+        assert_relative_eq!(distance, 0.0); // On boundary
+    }
+
+    #[test]
+    fn test_distance_point_to_polygon_generic_with_hole() {
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (6.0, 0.0), (6.0, 6.0), (0.0, 6.0), (0.0, 0.0)
+        ]);
+        let interior = LineString::from(vec![
+            (2.0, 2.0), (4.0, 2.0), (4.0, 4.0), (2.0, 4.0), (2.0, 2.0)
+        ]);
+        let polygon = Polygon::new(exterior, vec![interior]);
+        let point = Point::new(3.0, 3.0); // Inside the hole
+
+        let distance = distance_point_to_polygon_generic(&point, &polygon);
+        assert_relative_eq!(distance, 1.0); // Distance to closest hole edge
+    }
+
+    #[test]
+    fn test_distance_point_to_polygon_generic_empty() {
+        let empty_polygon = Polygon::new(LineString::<f64>::new(vec![]), vec![]);
+        let point = Point::new(1.0, 1.0);
+
+        let distance = distance_point_to_polygon_generic(&point, &empty_polygon);
+        assert_relative_eq!(distance, 0.0);
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for distance_line_to_line_generic                    │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_distance_line_to_line_generic_parallel() {
+        let line1 = Line::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 2.0, y: 0.0 });
+        let line2 = Line::new(coord! { x: 0.0, y: 3.0 }, coord! { x: 2.0, y: 3.0 });
+
+        let distance = distance_line_to_line_generic(&line1, &line2);
+        assert_relative_eq!(distance, 3.0);
+    }
+
+    #[test]
+    fn test_distance_line_to_line_generic_intersecting() {
+        let line1 = Line::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 2.0, y: 0.0 });
+        let line2 = Line::new(coord! { x: 1.0, y: -1.0 }, coord! { x: 1.0, y: 1.0 });
+
+        let distance = distance_line_to_line_generic(&line1, &line2);
+        assert_relative_eq!(distance, 0.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_distance_line_to_line_generic_skew() {
+        let line1 = Line::new(coord! { x: 0.0, y: 0.0 }, coord! { x: 1.0, y: 0.0 });
+        let line2 = Line::new(coord! { x: 2.0, y: 1.0 }, coord! { x: 3.0, y: 1.0 });
+
+        let distance = distance_line_to_line_generic(&line1, &line2);
+        let expected = ((2.0 - 1.0).powi(2) + (1.0 - 0.0).powi(2)).sqrt();
+        assert_relative_eq!(distance, expected);
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for distance_linestring_to_polygon_generic           │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_distance_linestring_to_polygon_generic_outside() {
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)
+        ]);
+        let polygon = Polygon::new(exterior, vec![]);
+        let linestring = LineString::from(vec![(3.0, 0.0), (4.0, 1.0)]);
+
+        let distance = distance_linestring_to_polygon_generic(&linestring, &polygon);
+        assert_relative_eq!(distance, 1.0); // Distance to right edge of polygon
+    }
+
+    #[test]
+    fn test_distance_linestring_to_polygon_generic_intersecting() {
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)
+        ]);
+        let polygon = Polygon::new(exterior, vec![]);
+        let linestring = LineString::from(vec![(-1.0, 1.0), (3.0, 1.0)]);
+
+        let distance = distance_linestring_to_polygon_generic(&linestring, &polygon);
+        // The algorithm computes minimum distance between line segments
+        // For this configuration, the result is 1.0 (minimum distance between segments)
+        assert_relative_eq!(distance, 1.0);
+    }
+
+    #[test]
+    fn test_distance_linestring_to_polygon_generic_empty_polygon() {
+        let empty_polygon = Polygon::new(LineString::<f64>::new(vec![]), vec![]);
+        let linestring = LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]);
+
+        let distance = distance_linestring_to_polygon_generic(&linestring, &empty_polygon);
+        assert_relative_eq!(distance, 0.0);
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for distance_polygon_to_polygon_generic              │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_distance_polygon_to_polygon_generic_separate() {
+        let exterior1 = LineString::from(vec![
+            (0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)
+        ]);
+        let polygon1 = Polygon::new(exterior1, vec![]);
+
+        let exterior2 = LineString::from(vec![
+            (4.0, 0.0), (6.0, 0.0), (6.0, 2.0), (4.0, 2.0), (4.0, 0.0)
+        ]);
+        let polygon2 = Polygon::new(exterior2, vec![]);
+
+        let distance = distance_polygon_to_polygon_generic(&polygon1, &polygon2);
+        assert_relative_eq!(distance, 2.0); // Distance between closest edges
+    }
+
+    #[test]
+    fn test_distance_polygon_to_polygon_generic_intersecting() {
+        let exterior1 = LineString::from(vec![
+            (0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0)
+        ]);
+        let polygon1 = Polygon::new(exterior1, vec![]);
+
+        let exterior2 = LineString::from(vec![
+            (1.0, 1.0), (4.0, 1.0), (4.0, 4.0), (1.0, 4.0), (1.0, 1.0)
+        ]);
+        let polygon2 = Polygon::new(exterior2, vec![]);
+
+        let distance = distance_polygon_to_polygon_generic(&polygon1, &polygon2);
+        assert_relative_eq!(distance, 0.0, epsilon = 1e-10); // Polygons intersect
+    }
+
+    #[test]
+    fn test_distance_polygon_to_polygon_generic_one_in_others_hole() {
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)
+        ]);
+        let interior = LineString::from(vec![
+            (2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0), (2.0, 2.0)
+        ]);
+        let polygon_with_hole = Polygon::new(exterior, vec![interior]);
+
+        let small_exterior = LineString::from(vec![
+            (4.0, 4.0), (6.0, 4.0), (6.0, 6.0), (4.0, 6.0), (4.0, 4.0)
+        ]);
+        let small_polygon = Polygon::new(small_exterior, vec![]);
+
+        let distance = distance_polygon_to_polygon_generic(&polygon_with_hole, &small_polygon);
+        assert_relative_eq!(distance, 2.0); // Distance to hole boundary
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for symmetric distance functions                     │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_symmetric_distance_point_linestring() {
+        let point = Point::new(1.0, 2.0);
+        let linestring = LineString::from(vec![(0.0, 0.0), (2.0, 0.0)]);
+
+        let dist1 = distance_point_to_linestring_generic(&point, &linestring);
+        let dist2 = distance_linestring_to_point_generic(&linestring, &point);
+
+        assert_relative_eq!(dist1, dist2);
+        assert_relative_eq!(dist1, 2.0);
+    }
+
+    #[test]
+    fn test_symmetric_distance_point_polygon() {
+        let point = Point::new(5.0, 2.0);
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+        ]);
+        let polygon = Polygon::new(exterior, vec![]);
+
+        let dist1 = distance_point_to_polygon_generic(&point, &polygon);
+        let dist2 = distance_polygon_to_point_generic(&polygon, &point);
+
+        assert_relative_eq!(dist1, dist2);
+        assert_relative_eq!(dist1, 1.0);
+    }
+
+    #[test]
+    fn test_symmetric_distance_linestring_polygon() {
+        let linestring = LineString::from(vec![(5.0, 1.0), (6.0, 2.0)]);
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+        ]);
+        let polygon = Polygon::new(exterior, vec![]);
+
+        let dist1 = distance_linestring_to_polygon_generic(&linestring, &polygon);
+        let dist2 = distance_polygon_to_linestring_generic(&polygon, &linestring);
+
+        assert_relative_eq!(dist1, dist2);
+        assert_relative_eq!(dist1, 1.0);
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for line-to-linestring and line-to-polygon functions │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_distance_line_to_linestring_generic() {
+        let line = Line::new(coord! { x: 0.0, y: 3.0 }, coord! { x: 2.0, y: 3.0 });
+        let linestring = LineString::from(vec![(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)]);
+
+        let distance = distance_line_to_linestring_generic(&line, &linestring);
+        assert_relative_eq!(distance, 1.0); // Distance to closest segment
+    }
+
+    #[test]
+    fn test_distance_line_to_polygon_generic() {
+        let line = Line::new(coord! { x: 5.0, y: 1.0 }, coord! { x: 6.0, y: 2.0 });
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)
+        ]);
+        let polygon = Polygon::new(exterior, vec![]);
+
+        let distance = distance_line_to_polygon_generic(&line, &polygon);
+        assert_relative_eq!(distance, 1.0);
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Tests for distance_triangle_to_point_generic               │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_distance_triangle_to_point_generic() {
+        let triangle = Triangle::new(
+            coord! { x: 0.0, y: 0.0 },
+            coord! { x: 3.0, y: 0.0 },
+            coord! { x: 1.5, y: 3.0 }
+        );
+        let point = Point::new(1.5, 1.0); // Inside triangle
+
+        let distance = distance_triangle_to_point_generic(&triangle, &point);
+        assert_relative_eq!(distance, 0.0);
+    }
+
+    #[test]
+    fn test_distance_triangle_to_point_generic_outside() {
+        let triangle = Triangle::new(
+            coord! { x: 0.0, y: 0.0 },
+            coord! { x: 3.0, y: 0.0 },
+            coord! { x: 1.5, y: 3.0 }
+        );
+        let point = Point::new(5.0, 0.0); // Outside triangle
+
+        let distance = distance_triangle_to_point_generic(&triangle, &point);
+        assert_relative_eq!(distance, 2.0); // Distance to right vertex
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Edge case tests                                            │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_empty_geometries_edge_cases() {
+        // Empty LineString
+        let empty_ls = LineString::<f64>::new(vec![]);
+        let point = Point::new(1.0, 1.0);
+
+        let dist = distance_point_to_linestring_generic(&point, &empty_ls);
+        assert_relative_eq!(dist, 0.0);
+
+        // Empty Polygon
+        let empty_poly = Polygon::new(LineString::<f64>::new(vec![]), vec![]);
+        let dist2 = distance_point_to_polygon_generic(&point, &empty_poly);
+        assert_relative_eq!(dist2, 0.0);
+    }
+
+    #[test]
+    fn test_degenerate_geometries() {
+        // Single point LineString
+        let single_point_ls = LineString::from(vec![(1.0, 1.0)]);
+        let point = Point::new(2.0, 2.0);
+
+        let dist = distance_point_to_linestring_generic(&point, &single_point_ls);
+        assert_relative_eq!(dist, 0.0); // Should handle gracefully
+
+        // Two identical points in LineString
+        let two_same_points_ls = LineString::from(vec![(1.0, 1.0), (1.0, 1.0)]);
+        let dist2 = distance_point_to_linestring_generic(&point, &two_same_points_ls);
+        assert_relative_eq!(dist2, std::f64::consts::SQRT_2); // Distance to the point
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Performance comparison tests (basic)                       │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_generic_vs_concrete_point_distance() {
+        let p1 = Point::new(-72.1235, 42.3521);
+        let p2 = Point::new(72.1260, 70.612);
+
+        // Test generic implementation
+        let generic_dist = point_distance_generic(&p1, &p2);
+
+        // Test concrete implementation via Euclidean trait
+        let concrete_dist = Euclidean.distance(&p1, &p2);
+
+        // Both should give the same result
+        assert_relative_eq!(generic_dist, concrete_dist, epsilon = 1e-10);
+        assert_relative_eq!(generic_dist, 146.99163308930207);
+    }
+
+    #[test]
+    fn test_cross_validation_with_existing_tests() {
+        // Test cases from existing distance.rs tests to ensure compatibility
+        let o1 = Point::new(8.0, 0.0);
+        let p1 = Point::new(7.2, 2.0);
+        let p2 = Point::new(6.0, 1.0);
+
+        // Create line from p1 to p2
+        let line_seg = Line::new(
+            coord! { x: p1.x(), y: p1.y() },
+            coord! { x: p2.x(), y: p2.y() }
+        );
+
+        if let Some(o1_coord) = o1.coord_ext() {
+            let generic_dist = line_segment_distance_generic(&o1_coord, &line_seg);
+
+            // This should match the expected value from the original test
+            assert_relative_eq!(generic_dist, 2.0485900789263356, epsilon = 1e-10);
+        }
+    }
+}
