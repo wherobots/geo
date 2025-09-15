@@ -445,6 +445,49 @@ macro_rules! impl_polygonlike_to_geometry_distance {
             distance_polygon_to_polygon_generic(&$poly, &poly2)
         }
     };
+    (@call_distance $poly:expr, $rhs:expr, MultiPointTag) => {
+        {
+            let mut min_dist: F = Bounded::max_value();
+            for coord in $rhs.coord_iter() {
+                let point = Point::from(coord);
+                let dist = distance_point_to_polygon_generic(&point, &$poly);
+                min_dist = min_dist.min(dist);
+            }
+            if min_dist == Bounded::max_value() {
+                F::zero()
+            } else {
+                min_dist
+            }
+        }
+    };
+    (@call_distance $poly:expr, $rhs:expr, MultiLineStringTag) => {
+        {
+            let mut min_dist: F = Bounded::max_value();
+            for line_string in $rhs.line_strings_ext() {
+                let dist = distance_linestring_to_polygon_generic(&line_string, &$poly);
+                min_dist = min_dist.min(dist);
+            }
+            if min_dist == Bounded::max_value() {
+                F::zero()
+            } else {
+                min_dist
+            }
+        }
+    };
+    (@call_distance $poly:expr, $rhs:expr, MultiPolygonTag) => {
+        {
+            let mut min_dist: F = Bounded::max_value();
+            for polygon in $rhs.polygons_ext() {
+                let dist = distance_polygon_to_polygon_generic(&$poly, &polygon);
+                min_dist = min_dist.min(dist);
+            }
+            if min_dist == Bounded::max_value() {
+                F::zero()
+            } else {
+                min_dist
+            }
+        }
+    };
 }
 
 /// Generic trait version of multi-geometry distance implementation
@@ -1032,6 +1075,9 @@ impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, LineTraitE
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, LineStringTraitExt, LineStringTag);
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, PolygonTraitExt, PolygonTag);
 impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, RectTraitExt, RectTag);
+impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, MultiPointTraitExt, MultiPointTag);
+impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, MultiLineStringTraitExt, MultiLineStringTag);
+impl_polygonlike_to_geometry_distance!(TriangleTraitExt, TriangleTag, MultiPolygonTraitExt, MultiPolygonTag);
 
 // Symmetric implementations for Triangle
 symmetric_distance_ext_trait_impl!(
@@ -1076,6 +1122,9 @@ impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, PointTraitExt, Poi
 impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, LineTraitExt, LineTag);
 impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, LineStringTraitExt, LineStringTag);
 impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, PolygonTraitExt, PolygonTag);
+impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, MultiPointTraitExt, MultiPointTag);
+impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, MultiLineStringTraitExt, MultiLineStringTag);
+impl_polygonlike_to_geometry_distance!(RectTraitExt, RectTag, MultiPolygonTraitExt, MultiPolygonTag);
 
 // Symmetric implementations for Rect (excluding Triangle which is already handled above)
 symmetric_distance_ext_trait_impl!(GeoFloat, PointTraitExt, PointTag, RectTraitExt, RectTag);
@@ -1162,10 +1211,30 @@ where
             (GeometryTypeExt::Polygon(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
             (GeometryTypeExt::Polygon(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
 
+            // Cross-type combinations with Triangle
+            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Point(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Triangle(left), GeometryTypeExt::LineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Polygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Triangle(left), GeometryTypeExt::MultiPoint(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Triangle(left), GeometryTypeExt::MultiLineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Triangle(left), GeometryTypeExt::MultiPolygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Triangle(left), GeometryTypeExt::Rect(right)) => left.distance_ext(right),
+
+            // Cross-type combinations with Rect
+            (GeometryTypeExt::Rect(left), GeometryTypeExt::Point(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Rect(left), GeometryTypeExt::Line(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Rect(left), GeometryTypeExt::LineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Rect(left), GeometryTypeExt::Polygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Rect(left), GeometryTypeExt::MultiPoint(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Rect(left), GeometryTypeExt::MultiLineString(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Rect(left), GeometryTypeExt::MultiPolygon(right)) => left.distance_ext(right),
+            (GeometryTypeExt::Rect(left), GeometryTypeExt::Triangle(right)) => left.distance_ext(right),
+
             // Cross-type combinations with MultiPoint
             // Cross-type combinations with MultiLineString
             // Cross-type combinations with MultiPolygon
-            // Cross-type combinations with Triangle
+
             // Cross-type combinations with GeometryCollection
 
             // For all other combinations, convert to concrete geometry and use Euclidean implementation
