@@ -252,75 +252,78 @@ where
     }
 
     if let (Some(ext1), Some(ext2)) = (polygon1.exterior_ext(), polygon2.exterior_ext()) {
-        // For containment checks, we still need concrete polygons since ring_contains_coord requires concrete types
-        let ext1_coords: Vec<Coord<F>> = ext1
-            .coords_ext()
-            .map(|c| Coord::from((c.x(), c.y())))
-            .collect();
-        let ext2_coords: Vec<Coord<F>> = ext2
-            .coords_ext()
-            .map(|c| Coord::from((c.x(), c.y())))
-            .collect();
+        // Early check: if no interiors in either polygon, skip containment logic entirely
+        let has_interiors1 = polygon1.interiors_ext().next().is_some();
+        let has_interiors2 = polygon2.interiors_ext().next().is_some();
 
-        let interior1_coords: Vec<LineString<F>> = polygon1
-            .interiors_ext()
-            .map(|ring| {
-                LineString::from(
-                    ring.coords_ext()
-                        .map(|c| (c.x(), c.y()))
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .collect();
-        let interior2_coords: Vec<LineString<F>> = polygon2
-            .interiors_ext()
-            .map(|ring| {
-                LineString::from(
-                    ring.coords_ext()
-                        .map(|c| (c.x(), c.y()))
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .collect();
+        if !has_interiors1 && !has_interiors2 {
+            // Fast path: no holes, just compute distance between exteriors
+            return distance_linestring_to_linestring_generic(&ext1, &ext2);
+        }
 
-        let poly_a: Polygon<F> = Polygon::new(LineString::from(ext1_coords), interior1_coords);
-        let poly_b: Polygon<F> = Polygon::new(LineString::from(ext2_coords), interior2_coords);
-
-        // Containment check - if polygon_b is inside polygon_a's hole
-        if !poly_a.interiors().is_empty() {
-            // Get first coordinate of polygon_b's exterior ring
+        // Only create temporary objects if we need containment checks
+        if has_interiors1 {
+            // Check if polygon_b is inside polygon_a's hole
             if let Some(first_coord_b) = ext2.coords_ext().next() {
+                // Create exterior LineString only if needed
+                let ext1_ls = LineString::from(
+                    ext1.coords_ext()
+                        .map(|c| (c.x(), c.y()))
+                        .collect::<Vec<_>>(),
+                );
+
                 let coord_b = Coord::from((first_coord_b.x(), first_coord_b.y()));
-                if ring_contains_coord(poly_a.exterior(), coord_b) {
-                    // check each ring distance, returning the minimum
-                    let mut mindist: F = Float::max_value();
+                if ring_contains_coord(&ext1_ls, coord_b) {
+                    // Only create ext2 concrete if we're inside the polygon
                     let ext2_concrete = LineString::from(
                         ext2.coords_ext()
                             .map(|c| (c.x(), c.y()))
                             .collect::<Vec<_>>(),
                     );
-                    for ring in poly_a.interiors() {
-                        mindist = mindist.min(nearest_neighbour_distance(&ext2_concrete, ring));
+
+                    let mut mindist: F = Float::max_value();
+                    for ring in polygon1.interiors_ext() {
+                        let ring_concrete = LineString::from(
+                            ring.coords_ext()
+                                .map(|c| (c.x(), c.y()))
+                                .collect::<Vec<_>>(),
+                        );
+                        mindist =
+                            mindist.min(nearest_neighbour_distance(&ext2_concrete, &ring_concrete));
                     }
                     return mindist;
                 }
             }
         }
 
-        // Containment check - if polygon_a is inside polygon_b's hole
-        if !poly_b.interiors().is_empty() {
-            // Get first coordinate of polygon_a's exterior ring
+        if has_interiors2 {
+            // Check if polygon_a is inside polygon_b's hole
             if let Some(first_coord_a) = ext1.coords_ext().next() {
+                // Create exterior LineString only if needed
+                let ext2_ls = LineString::from(
+                    ext2.coords_ext()
+                        .map(|c| (c.x(), c.y()))
+                        .collect::<Vec<_>>(),
+                );
+
                 let coord_a = Coord::from((first_coord_a.x(), first_coord_a.y()));
-                if ring_contains_coord(poly_b.exterior(), coord_a) {
-                    let mut mindist: F = Float::max_value();
+                if ring_contains_coord(&ext2_ls, coord_a) {
+                    // Only create ext1 concrete if we're inside the polygon
                     let ext1_concrete = LineString::from(
                         ext1.coords_ext()
                             .map(|c| (c.x(), c.y()))
                             .collect::<Vec<_>>(),
                     );
-                    for ring in poly_b.interiors() {
-                        mindist = mindist.min(nearest_neighbour_distance(&ext1_concrete, ring));
+
+                    let mut mindist: F = Float::max_value();
+                    for ring in polygon2.interiors_ext() {
+                        let ring_concrete = LineString::from(
+                            ring.coords_ext()
+                                .map(|c| (c.x(), c.y()))
+                                .collect::<Vec<_>>(),
+                        );
+                        mindist =
+                            mindist.min(nearest_neighbour_distance(&ext1_concrete, &ring_concrete));
                     }
                     return mindist;
                 }
@@ -328,17 +331,7 @@ where
         }
 
         // Default case - distance between exterior rings
-        let ext1_concrete = LineString::from(
-            ext1.coords_ext()
-                .map(|c| (c.x(), c.y()))
-                .collect::<Vec<_>>(),
-        );
-        let ext2_concrete = LineString::from(
-            ext2.coords_ext()
-                .map(|c| (c.x(), c.y()))
-                .collect::<Vec<_>>(),
-        );
-        nearest_neighbour_distance(&ext1_concrete, &ext2_concrete)
+        distance_linestring_to_linestring_generic(&ext1, &ext2)
     } else {
         F::zero()
     }
