@@ -1,4 +1,3 @@
-use super::{Distance, Euclidean};
 use crate::algorithm::Intersects;
 use crate::coordinate_position::{coord_pos_relative_to_ring, CoordPos};
 use crate::geometry::*;
@@ -8,19 +7,15 @@ use geo_traits_ext::{
     LineStringTraitExt, LineTraitExt, PointTraitExt, PolygonTraitExt, TriangleTraitExt,
 };
 use num_traits::{Bounded, Float};
-use rstar::primitives::CachedEnvelope;
-use rstar::RTree;
 
 // ┌────────────────────────────────────────────────────────────┐
 // │ Helper functions for generic distance calculations         │
 // └────────────────────────────────────────────────────────────┘
 
 pub fn nearest_neighbour_distance<F: GeoFloat>(geom1: &LineString<F>, geom2: &LineString<F>) -> F {
-    let tree_a = RTree::bulk_load(geom1.lines().map(CachedEnvelope::new).collect());
-    let tree_b = RTree::bulk_load(geom2.lines().map(CachedEnvelope::new).collect());
-
     let mut min_distance: F = Bounded::max_value();
 
+    // Primary computation: line-to-line distances
     for line1 in geom1.lines() {
         for line2 in geom2.lines() {
             let line_distance = distance_line_to_line_generic(&line1, &line2);
@@ -33,18 +28,27 @@ pub fn nearest_neighbour_distance<F: GeoFloat>(geom1: &LineString<F>, geom2: &Li
         }
     }
 
-    let point_line_dist = geom2
-        .points()
-        .fold(Bounded::max_value(), |acc: F, point| {
-            let nearest = tree_a.nearest_neighbor(&point).unwrap();
-            acc.min(Euclidean.distance(nearest as &Line<F>, &point))
-        })
-        .min(geom1.points().fold(Bounded::max_value(), |acc, point| {
-            let nearest = tree_b.nearest_neighbor(&point).unwrap();
-            acc.min(Euclidean.distance(nearest as &Line<F>, &point))
-        }));
+    // Check points of geom2 against lines of geom1
+    for point in geom2.points() {
+        if let Some(coord) = point.coord_ext() {
+            for line1 in geom1.lines() {
+                let dist = line_segment_distance_generic(&coord, &line1);
+                min_distance = min_distance.min(dist);
+            }
+        }
+    }
 
-    min_distance.min(point_line_dist)
+    // Check points of geom1 against lines of geom2
+    for point in geom1.points() {
+        if let Some(coord) = point.coord_ext() {
+            for line2 in geom2.lines() {
+                let dist = line_segment_distance_generic(&coord, &line2);
+                min_distance = min_distance.min(dist);
+            }
+        }
+    }
+
+    min_distance
 }
 
 pub fn ring_contains_coord<T: GeoNum>(ring: &LineString<T>, c: Coord<T>) -> bool {
@@ -160,32 +164,32 @@ where
         return F::zero();
     }
 
-    // Use the existing generic Intersects implementation
     // If the point intersects the polygon (is inside or on boundary), distance is 0
     if polygon.intersects(point) {
         return F::zero();
     }
 
     // Point is outside the polygon, calculate minimum distance to edges
-    if let (Some(coord), Some(exterior)) = (point.coord(), polygon.exterior_ext()) {
-        // Calculate minimum distance to exterior ring
-        let exterior_dist = exterior
-            .lines()
-            .map(|line| line_segment_distance_generic(&coord, &line))
-            .fold(Float::max_value(), |acc: F, dist| acc.min(dist));
+    if let (Some(coord), Some(exterior)) = (point.coord_ext(), polygon.exterior_ext()) {
+        let mut min_dist: F = Float::max_value();
 
-        // Calculate minimum distance to interior rings (holes)
-        let interior_dist = polygon
-            .interiors_ext()
-            .map(|interior| {
-                interior
-                    .lines()
-                    .map(|line| line_segment_distance_generic(&coord, &line))
-                    .fold(Float::max_value(), |acc: F, dist| acc.min(dist))
-            })
-            .fold(Float::max_value(), |acc: F, dist| acc.min(dist));
+        // Calculate minimum distance to exterior ring - single loop
+        for line in exterior.lines() {
+            let dist = line_segment_distance_generic(&coord, &line);
+            min_dist = min_dist.min(dist);
+        }
 
-        exterior_dist.min(interior_dist)
+        // Only check interior rings if they exist
+        if polygon.interiors_ext().next().is_some() {
+            for interior in polygon.interiors_ext() {
+                for line in interior.lines() {
+                    let dist = line_segment_distance_generic(&coord, &line);
+                    min_dist = min_dist.min(dist);
+                }
+            }
+        }
+
+        min_dist
     } else {
         F::zero()
     }
@@ -198,6 +202,11 @@ where
     LS: LineStringTraitExt<T = F>,
     Poly: PolygonTraitExt<T = F>,
 {
+    // Early intersect check
+    if polygon.intersects(linestring) {
+        return F::zero();
+    }
+
     if let Some(exterior) = polygon.exterior_ext() {
         let mut min_dist: F = Float::max_value();
 
@@ -207,23 +216,23 @@ where
                 let line_dist = distance_line_to_line_generic(&line1, &line2);
                 min_dist = min_dist.min(line_dist);
 
-                // Early exit if we found an intersection
                 if line_dist == F::zero() {
                     return F::zero();
                 }
             }
         }
 
-        // Also calculate distance to interior rings (holes)
-        for interior in polygon.interiors_ext() {
-            for line1 in linestring.lines() {
-                for line2 in interior.lines() {
-                    let line_dist = distance_line_to_line_generic(&line1, &line2);
-                    min_dist = min_dist.min(line_dist);
+        // Also calculate distance to interior rings (holes) - but only if they exist
+        if polygon.interiors_ext().next().is_some() {
+            for interior in polygon.interiors_ext() {
+                for line1 in linestring.lines() {
+                    for line2 in interior.lines() {
+                        let line_dist = distance_line_to_line_generic(&line1, &line2);
+                        min_dist = min_dist.min(line_dist);
 
-                    // Early exit if we found an intersection
-                    if line_dist == F::zero() {
-                        return F::zero();
+                        if line_dist == F::zero() {
+                            return F::zero();
+                        }
                     }
                 }
             }
@@ -458,6 +467,7 @@ symmetric_distance_generic_impl!(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::algorithm::line_measures::{Distance, Euclidean};
     use crate::{coord, Line, LineString, Point, Polygon, Triangle};
     use approx::assert_relative_eq;
 
