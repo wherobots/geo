@@ -294,20 +294,18 @@ where
     }
 
     if let (Some(ext1), Some(ext2)) = (polygon1.exterior_ext(), polygon2.exterior_ext()) {
-        // Early check: if no interiors in either polygon, skip containment logic entirely
         let has_interiors1 = polygon1.interiors_ext().next().is_some();
         let has_interiors2 = polygon2.interiors_ext().next().is_some();
 
+        // Fast path: if no interiors in either polygon, skip containment logic entirely
         if !has_interiors1 && !has_interiors2 {
-            // Fast path: no holes, just compute distance between exteriors
             return distance_linestring_to_linestring_generic(&ext1, &ext2);
         }
 
-        // Only create temporary objects if we need containment checks
+        // Symmetric containment logic matching concrete implementation exactly
+        // Check if polygon_b is contained within polygon_a (has holes)
         if has_interiors1 {
-            // Check if polygon_b is inside polygon_a's hole
             if let Some(first_coord_b) = ext2.coords_ext().next() {
-                // Create exterior LineString only if needed
                 let ext1_ls = LineString::from(
                     ext1.coords_ext()
                         .map(|c| (c.x(), c.y()))
@@ -316,7 +314,7 @@ where
 
                 let coord_b = Coord::from((first_coord_b.x(), first_coord_b.y()));
                 if ring_contains_coord(&ext1_ls, coord_b) {
-                    // Only create ext2 concrete if we're inside the polygon
+                    // polygon_b is inside polygon_a: check distance to polygon_a's holes
                     let ext2_concrete = LineString::from(
                         ext2.coords_ext()
                             .map(|c| (c.x(), c.y()))
@@ -330,18 +328,16 @@ where
                                 .map(|c| (c.x(), c.y()))
                                 .collect::<Vec<_>>(),
                         );
-                        mindist =
-                            mindist.min(nearest_neighbour_distance(&ext2_concrete, &ring_concrete));
+                        mindist = mindist.min(nearest_neighbour_distance(&ext2_concrete, &ring_concrete));
                     }
                     return mindist;
                 }
             }
         }
 
+        // Check if polygon_a is contained within polygon_b (has holes)
         if has_interiors2 {
-            // Check if polygon_a is inside polygon_b's hole
             if let Some(first_coord_a) = ext1.coords_ext().next() {
-                // Create exterior LineString only if needed
                 let ext2_ls = LineString::from(
                     ext2.coords_ext()
                         .map(|c| (c.x(), c.y()))
@@ -350,7 +346,7 @@ where
 
                 let coord_a = Coord::from((first_coord_a.x(), first_coord_a.y()));
                 if ring_contains_coord(&ext2_ls, coord_a) {
-                    // Only create ext1 concrete if we're inside the polygon
+                    // polygon_a is inside polygon_b: check distance to polygon_b's holes
                     let ext1_concrete = LineString::from(
                         ext1.coords_ext()
                             .map(|c| (c.x(), c.y()))
@@ -364,8 +360,7 @@ where
                                 .map(|c| (c.x(), c.y()))
                                 .collect::<Vec<_>>(),
                         );
-                        mindist =
-                            mindist.min(nearest_neighbour_distance(&ext1_concrete, &ring_concrete));
+                        mindist = mindist.min(nearest_neighbour_distance(&ext1_concrete, &ring_concrete));
                     }
                     return mindist;
                 }
@@ -1917,5 +1912,81 @@ mod tests {
         let _does_intersect = inside_linestring.intersects(&polygon);
 
         assert_relative_eq!(concrete_distance, generic_distance, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polygon_to_polygon_symmetric_containment_correctness() {
+        // Test that both A contains B and B contains A cases work correctly
+        use geo_types::{LineString, Polygon};
+        use crate::algorithm::line_measures::{Distance, Euclidean};
+
+        // Case 1: Large polygon with hole contains small polygon
+        let large_exterior = LineString::from(vec![
+            (0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0), (0.0, 0.0)
+        ]);
+        let large_hole = LineString::from(vec![
+            (8.0, 8.0), (12.0, 8.0), (12.0, 12.0), (8.0, 12.0), (8.0, 8.0)
+        ]);
+        let large_polygon = Polygon::new(large_exterior, vec![large_hole]);
+
+        // Small polygon inside the large polygon (but outside the hole)
+        let small_exterior = LineString::from(vec![
+            (2.0, 2.0), (6.0, 2.0), (6.0, 6.0), (2.0, 6.0), (2.0, 2.0)
+        ]);
+        let small_polygon = Polygon::new(small_exterior, vec![]);
+
+        // Test A contains B: large polygon with hole contains small polygon
+        let concrete_dist_ab = Euclidean.distance(&small_polygon, &large_polygon);
+        let generic_dist_ab = distance_polygon_to_polygon_generic(&small_polygon, &large_polygon);
+
+        // Test B contains A: small polygon contains large polygon (should be distance between exteriors)
+        let concrete_dist_ba = Euclidean.distance(&large_polygon, &small_polygon);
+        let generic_dist_ba = distance_polygon_to_polygon_generic(&large_polygon, &small_polygon);
+
+        // Both directions should match between concrete and generic
+        assert_relative_eq!(concrete_dist_ab, generic_dist_ab, epsilon = 1e-10);
+        assert_relative_eq!(concrete_dist_ba, generic_dist_ba, epsilon = 1e-10);
+
+        // The distances should be the same due to symmetry
+        assert_relative_eq!(concrete_dist_ab, concrete_dist_ba, epsilon = 1e-10);
+        assert_relative_eq!(generic_dist_ab, generic_dist_ba, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_polygon_to_polygon_both_have_holes_correctness() {
+        // Test case where both polygons have holes
+        use geo_types::{LineString, Polygon};
+        use crate::algorithm::line_measures::{Distance, Euclidean};
+
+        // Polygon A with hole
+        let exterior_a = LineString::from(vec![
+            (0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)
+        ]);
+        let hole_a = LineString::from(vec![
+            (3.0, 3.0), (7.0, 3.0), (7.0, 7.0), (3.0, 7.0), (3.0, 3.0)
+        ]);
+        let polygon_a = Polygon::new(exterior_a, vec![hole_a]);
+
+        // Polygon B with hole (separate from A)
+        let exterior_b = LineString::from(vec![
+            (15.0, 0.0), (25.0, 0.0), (25.0, 10.0), (15.0, 10.0), (15.0, 0.0)
+        ]);
+        let hole_b = LineString::from(vec![
+            (18.0, 3.0), (22.0, 3.0), (22.0, 7.0), (18.0, 7.0), (18.0, 3.0)
+        ]);
+        let polygon_b = Polygon::new(exterior_b, vec![hole_b]);
+
+        // Neither polygon contains the other, so should calculate distance between exteriors
+        let concrete_dist = Euclidean.distance(&polygon_a, &polygon_b);
+        let generic_dist = distance_polygon_to_polygon_generic(&polygon_a, &polygon_b);
+
+        assert_relative_eq!(concrete_dist, generic_dist, epsilon = 1e-10);
+
+        // Test symmetry
+        let concrete_dist_reverse = Euclidean.distance(&polygon_b, &polygon_a);
+        let generic_dist_reverse = distance_polygon_to_polygon_generic(&polygon_b, &polygon_a);
+
+        assert_relative_eq!(concrete_dist_reverse, generic_dist_reverse, epsilon = 1e-10);
+        assert_relative_eq!(concrete_dist, concrete_dist_reverse, epsilon = 1e-10);
     }
 }
