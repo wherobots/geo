@@ -80,27 +80,39 @@ where
     C: CoordTrait<T = F>,
     L: LineTraitExt<T = F>,
 {
-    let px = coord.x();
-    let py = coord.y();
+    let point_x = coord.x();
+    let point_y = coord.y();
     let start = line.start_coord();
     let end = line.end_coord();
-    let dx = end.x - start.x;
-    let dy = end.y - start.y;
 
-    if dx == F::zero() && dy == F::zero() {
-        let delta_x = px - start.x;
-        let delta_y = py - start.y;
+    // Handle degenerate case: line segment is a point
+    if start.x == end.x && start.y == end.y {
+        let delta_x = point_x - start.x;
+        let delta_y = point_y - start.y;
         return delta_x.hypot(delta_y);
     }
 
-    let t = ((px - start.x) * dx + (py - start.y) * dy) / (dx * dx + dy * dy);
-    let t = t.max(F::zero()).min(F::one());
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let d_squared = dx * dx + dy * dy;
+    let r = ((point_x - start.x) * dx + (point_y - start.y) * dy) / d_squared;
 
-    let nearest_x = start.x + t * dx;
-    let nearest_y = start.y + t * dy;
-    let delta_x = px - nearest_x;
-    let delta_y = py - nearest_y;
-    delta_x.hypot(delta_y)
+    if r <= F::zero() {
+        // Closest point is the start point
+        let delta_x = point_x - start.x;
+        let delta_y = point_y - start.y;
+        return delta_x.hypot(delta_y);
+    }
+    if r >= F::one() {
+        // Closest point is the end point
+        let delta_x = point_x - end.x;
+        let delta_y = point_y - end.y;
+        return delta_x.hypot(delta_y);
+    }
+
+    // Closest point is on the line segment - use perpendicular distance
+    let s = ((start.y - point_y) * dx - (start.x - point_x) * dy) / d_squared;
+    s.abs() * dx.hypot(dy)
 }
 
 /// Line to Line distance
@@ -2035,5 +2047,43 @@ mod tests {
         assert!(concrete_dist_off > 0.0);
         assert!(generic_dist_off > 0.0);
         assert_relative_eq!(concrete_dist_off, generic_dist_off, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_line_segment_distance_algorithm_equivalence() {
+        // Test that the updated generic algorithm produces identical results to concrete
+        use geo_types::{coord, Line, Point};
+        use crate::algorithm::line_measures::{Distance, Euclidean};
+
+        // Test cases covering different scenarios
+        let test_cases = vec![
+            // Point, Line start, Line end
+            (coord! { x: 0.0, y: 0.0 }, coord! { x: 1.0, y: 0.0 }, coord! { x: 3.0, y: 0.0 }), // Before start
+            (coord! { x: 2.0, y: 1.0 }, coord! { x: 1.0, y: 0.0 }, coord! { x: 3.0, y: 0.0 }), // Perpendicular
+            (coord! { x: 4.0, y: 0.0 }, coord! { x: 1.0, y: 0.0 }, coord! { x: 3.0, y: 0.0 }), // Beyond end
+            (coord! { x: 2.0, y: 0.0 }, coord! { x: 1.0, y: 0.0 }, coord! { x: 3.0, y: 0.0 }), // On line
+            (coord! { x: 1.0, y: 0.0 }, coord! { x: 1.0, y: 0.0 }, coord! { x: 3.0, y: 0.0 }), // On start point
+            (coord! { x: 3.0, y: 0.0 }, coord! { x: 1.0, y: 0.0 }, coord! { x: 3.0, y: 0.0 }), // On end point
+            (coord! { x: 0.0, y: 0.0 }, coord! { x: 1.0, y: 1.0 }, coord! { x: 1.0, y: 1.0 }), // Degenerate line
+            (coord! { x: 2.5, y: 3.0 }, coord! { x: 0.0, y: 0.0 }, coord! { x: 5.0, y: 5.0 }), // Diagonal line
+        ];
+
+        for (point_coord, start_coord, end_coord) in test_cases {
+            let point = Point::from(point_coord);
+            let line = Line::new(start_coord, end_coord);
+
+            // Test concrete implementation
+            let concrete_distance = Euclidean.distance(&point, &line);
+
+            // Test generic implementation
+            let generic_distance = line_segment_distance_generic(&point_coord, &line);
+
+            // They should be identical now
+            assert_relative_eq!(
+                concrete_distance,
+                generic_distance,
+                epsilon = 1e-15
+            );
+        }
     }
 }
