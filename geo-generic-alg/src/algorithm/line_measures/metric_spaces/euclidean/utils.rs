@@ -2,7 +2,7 @@ use crate::algorithm::Intersects;
 use crate::coordinate_position::{coord_pos_relative_to_ring, CoordPos};
 use crate::geometry::*;
 use crate::{CoordFloat, GeoFloat, GeoNum};
-use geo_traits::CoordTrait;
+use geo_traits::{CoordTrait, LineStringTrait};
 use geo_traits_ext::{
     LineStringTraitExt, LineTraitExt, PointTraitExt, PolygonTraitExt, TriangleTraitExt,
 };
@@ -208,22 +208,46 @@ where
     }
 
     if let Some(exterior) = polygon.exterior_ext() {
-        let mut min_dist: F = Float::max_value();
+        // Check containment logic: if polygon has holes AND first point of LineString is inside exterior ring,
+        // then only consider distance to holes (interior rings). Otherwise, consider distance to exterior.
+        let has_holes = polygon.interiors_ext().next().is_some();
 
-        // Calculate distance to exterior ring using proper line-to-line distance
-        for line1 in linestring.lines() {
-            for line2 in exterior.lines() {
-                let line_dist = distance_line_to_line_generic(&line1, &line2);
-                min_dist = min_dist.min(line_dist);
+        let first_point_inside = if has_holes {
+            // Check if first point of LineString is inside the exterior ring
+            if let Some(first_coord) = linestring.coords().next() {
+                // Simple point-in-polygon test using ray casting
+                let point_x = first_coord.x();
+                let point_y = first_coord.y();
+                let mut inside = false;
+                let ring_coords: Vec<_> = exterior.coords().collect();
+                let n = ring_coords.len();
 
-                if line_dist == F::zero() {
-                    return F::zero();
+                if n > 0 {
+                    let mut j = n - 1;
+                    for i in 0..n {
+                        let xi = ring_coords[i].x();
+                        let yi = ring_coords[i].y();
+                        let xj = ring_coords[j].x();
+                        let yj = ring_coords[j].y();
+
+                        if ((yi > point_y) != (yj > point_y)) &&
+                           (point_x < (xj - xi) * (point_y - yi) / (yj - yi) + xi) {
+                            inside = !inside;
+                        }
+                        j = i;
+                    }
                 }
+                inside
+            } else {
+                false // Empty LineString
             }
-        }
+        } else {
+            false
+        };
 
-        // Also calculate distance to interior rings (holes) - but only if they exist
-        if polygon.interiors_ext().next().is_some() {
+        if has_holes && first_point_inside {
+            // LineString is inside polygon: only check distance to interior rings (holes)
+            let mut min_dist: F = Float::max_value();
             for interior in polygon.interiors_ext() {
                 for line1 in linestring.lines() {
                     for line2 in interior.lines() {
@@ -236,11 +260,20 @@ where
                     }
                 }
             }
-        }
-
-        if min_dist == Float::max_value() {
-            F::zero()
+            min_dist
         } else {
+            // LineString is outside polygon or polygon has no holes: check distance to exterior ring only
+            let mut min_dist: F = Float::max_value();
+            for line1 in linestring.lines() {
+                for line2 in exterior.lines() {
+                    let line_dist = distance_line_to_line_generic(&line1, &line2);
+                    min_dist = min_dist.min(line_dist);
+
+                    if line_dist == F::zero() {
+                        return F::zero();
+                    }
+                }
+            }
             min_dist
         }
     } else {
@@ -1773,5 +1806,116 @@ mod tests {
             distance, 0.0,
             "Distance between +0 and -0 should be exactly 0"
         );
+    }
+
+    // ┌────────────────────────────────────────────────────────────┐
+    // │ Algorithmic Correctness Validation Tests                   │
+    // └────────────────────────────────────────────────────────────┘
+
+    #[test]
+    fn test_linestring_inside_polygon_with_holes_correctness() {
+        // This test exposes the algorithmic difference between generic and concrete implementations
+
+        // Create a polygon with a hole
+        let outer = LineString::from(vec![
+            (0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)
+        ]);
+        let hole = LineString::from(vec![
+            (3.0, 3.0), (7.0, 3.0), (7.0, 7.0), (3.0, 7.0), (3.0, 3.0)
+        ]);
+        let polygon = Polygon::new(outer, vec![hole]);
+
+        // LineString that is INSIDE the polygon but OUTSIDE the hole
+        let linestring_inside = LineString::from(vec![(1.0, 1.0), (2.0, 2.0)]);
+
+        let concrete_dist = Euclidean.distance(&linestring_inside, &polygon);
+        let generic_dist = distance_linestring_to_polygon_generic(&linestring_inside, &polygon);
+
+        // The results should be identical
+        assert_relative_eq!(
+            concrete_dist,
+            generic_dist,
+            epsilon = 1e-10
+        );
+    }
+
+    #[test]
+    fn test_linestring_outside_polygon_with_holes_correctness() {
+        // Test case where LineString is completely outside the polygon
+
+        let outer = LineString::from(vec![
+            (0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)
+        ]);
+        let hole = LineString::from(vec![
+            (3.0, 3.0), (7.0, 3.0), (7.0, 7.0), (3.0, 7.0), (3.0, 3.0)
+        ]);
+        let polygon = Polygon::new(outer, vec![hole]);
+
+        // LineString that is OUTSIDE the polygon entirely
+        let linestring_outside = LineString::from(vec![(12.0, 12.0), (13.0, 13.0)]);
+
+        let concrete_dist = Euclidean.distance(&linestring_outside, &polygon);
+        let generic_dist = distance_linestring_to_polygon_generic(&linestring_outside, &polygon);
+
+        assert_relative_eq!(
+            concrete_dist,
+            generic_dist,
+            epsilon = 1e-10
+        );
+    }
+
+    #[test]
+    fn test_linestring_crossing_polygon_boundary_correctness() {
+        // Test case where LineString crosses the polygon boundary
+
+        let outer = LineString::from(vec![
+            (0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)
+        ]);
+        let polygon = Polygon::new(outer, vec![]);
+
+        // LineString that crosses the polygon boundary (should intersect)
+        let linestring_crossing = LineString::from(vec![(-1.0, 5.0), (11.0, 5.0)]);
+
+        let concrete_dist = Euclidean.distance(&linestring_crossing, &polygon);
+        let generic_dist = distance_linestring_to_polygon_generic(&linestring_crossing, &polygon);
+
+        // Both should be 0.0 since they intersect
+        assert_eq!(concrete_dist, 0.0, "Concrete should return 0 for intersecting geometries");
+        assert_eq!(generic_dist, 0.0, "Generic should return 0 for intersecting geometries");
+
+        assert_relative_eq!(
+            concrete_dist,
+            generic_dist,
+            epsilon = 1e-10
+        );
+    }
+
+    #[test]
+    fn test_containment_logic_specific() {
+        // This test specifically checks the containment logic for polygons with holes
+        use geo_types::{LineString, Polygon};
+        use crate::algorithm::line_measures::{Distance, Euclidean};
+
+        // Create a larger polygon with a hole
+        let exterior = LineString::from(vec![
+            (0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0), (0.0, 0.0)
+        ]);
+        let hole = LineString::from(vec![
+            (8.0, 8.0), (12.0, 8.0), (12.0, 12.0), (8.0, 12.0), (8.0, 8.0)
+        ]);
+        let polygon = Polygon::new(exterior, vec![hole]);
+
+        // LineString that is INSIDE the polygon but OUTSIDE the hole,
+        // Create a small LineString very close to itself to avoid intersection
+        let inside_linestring = LineString::from(vec![(5.0, 5.0), (5.1, 5.1)]);
+
+        let concrete_distance = Euclidean.distance(&inside_linestring, &polygon);
+        let generic_distance = distance_linestring_to_polygon_generic(&inside_linestring, &polygon);
+
+        // Check if LineString actually intersects with the polygon
+        use crate::algorithm::Intersects;
+        let _does_intersect = inside_linestring.intersects(&polygon);
+
+        assert_relative_eq!(concrete_distance, generic_distance, epsilon = 1e-10);
     }
 }
