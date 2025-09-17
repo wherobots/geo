@@ -137,6 +137,12 @@ where
     LS: LineStringTraitExt<T = F>,
 {
     if let Some(coord) = point.coord() {
+        // Early exit optimization: if point is on the linestring, distance is 0
+        // Check if the point is contained in the linestring using intersects
+        if linestring.intersects(point) {
+            return F::zero();
+        }
+
         let mut lines = linestring.lines();
         if let Some(first_line) = lines.next() {
             let mut min_distance = line_segment_distance_generic(&coord, &first_line);
@@ -1988,5 +1994,46 @@ mod tests {
 
         assert_relative_eq!(concrete_dist_reverse, generic_dist_reverse, epsilon = 1e-10);
         assert_relative_eq!(concrete_dist, concrete_dist_reverse, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_point_to_linestring_containment_optimization() {
+        // Test that the containment check optimization works correctly
+        use geo_types::{LineString, Point};
+        use crate::algorithm::line_measures::{Distance, Euclidean};
+
+        // Create a LineString
+        let linestring = LineString::from(vec![
+            (0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (10.0, 5.0)
+        ]);
+
+        // Point ON the LineString (should return 0 due to containment check)
+        let point_on_line = Point::new(2.5, 0.0); // On first segment
+        let concrete_dist_on = Euclidean.distance(&point_on_line, &linestring);
+        let generic_dist_on = distance_point_to_linestring_generic(&point_on_line, &linestring);
+
+        // Both should be exactly 0 due to containment
+        assert_eq!(concrete_dist_on, 0.0);
+        assert_eq!(generic_dist_on, 0.0);
+        assert_relative_eq!(concrete_dist_on, generic_dist_on, epsilon = 1e-10);
+
+        // Point ON a vertex (should return 0)
+        let point_on_vertex = Point::new(5.0, 0.0);
+        let concrete_dist_vertex = Euclidean.distance(&point_on_vertex, &linestring);
+        let generic_dist_vertex = distance_point_to_linestring_generic(&point_on_vertex, &linestring);
+
+        assert_eq!(concrete_dist_vertex, 0.0);
+        assert_eq!(generic_dist_vertex, 0.0);
+        assert_relative_eq!(concrete_dist_vertex, generic_dist_vertex, epsilon = 1e-10);
+
+        // Point NOT on the LineString (should calculate actual distance)
+        let point_off_line = Point::new(2.5, 3.0);
+        let concrete_dist_off = Euclidean.distance(&point_off_line, &linestring);
+        let generic_dist_off = distance_point_to_linestring_generic(&point_off_line, &linestring);
+
+        // Should be greater than 0 and both implementations should match
+        assert!(concrete_dist_off > 0.0);
+        assert!(generic_dist_off > 0.0);
+        assert_relative_eq!(concrete_dist_off, generic_dist_off, epsilon = 1e-10);
     }
 }
