@@ -1577,14 +1577,12 @@ mod tests {
             let distance = Euclidean.distance(&p, &mp);
             assert_relative_eq!(distance, 60.959002616512684);
 
-            // Test generic implementation - compute distance to each polygon and take minimum
-            let generic_dist1 = p.distance_ext(&p1);
-            let generic_dist2 = p.distance_ext(&p2);
-            let generic_min_dist = generic_dist1.min(generic_dist2);
-            assert_relative_eq!(generic_min_dist, 60.959002616512684);
+            // Test generic implementation
+            let generic_dist = mp.distance_ext(&p);
+            assert_relative_eq!(generic_dist, 60.959002616512684);
 
             // Ensure both implementations agree
-            assert_relative_eq!(distance, generic_min_dist);
+            assert_relative_eq!(distance, generic_dist);
         }
         #[test]
         // Point to LineString
@@ -1691,14 +1689,12 @@ mod tests {
             let distance = Euclidean.distance(&p, &mls);
             assert_relative_eq!(distance, 63.25345840347388);
 
-            // Test generic implementation - compute distance to each linestring and take minimum
-            let generic_dist1 = p.distance_ext(&v1);
-            let generic_dist2 = p.distance_ext(&v2);
-            let generic_min_dist = generic_dist1.min(generic_dist2);
-            assert_relative_eq!(generic_min_dist, 63.25345840347388);
+            // Test generic implementation
+            let generic_dist = p.distance_ext(&mls);
+            assert_relative_eq!(generic_dist, 63.25345840347388);
 
             // Ensure both implementations agree
-            assert_relative_eq!(distance, generic_min_dist);
+            assert_relative_eq!(distance, generic_dist);
         }
         #[test]
         fn distance1_test() {
@@ -1752,15 +1748,9 @@ mod tests {
             let distance = Euclidean.distance(&p, &mp);
             assert_relative_eq!(distance, 64.03124237432849);
 
-            // Test generic implementation - compute distance to each point and take minimum
-            let generic_min_dist = v
-                .iter()
-                .map(|point| point_distance_generic(&p, point))
-                .fold(Float::max_value(), |acc: f64, dist| acc.min(dist));
-            assert_relative_eq!(generic_min_dist, 64.03124237432849);
-
+            let generic_dist = mp.distance_ext(&p);
             // Ensure both implementations agree
-            assert_relative_eq!(distance, generic_min_dist);
+            assert_relative_eq!(distance, generic_dist);
         }
         #[test]
         fn distance_line_test() {
