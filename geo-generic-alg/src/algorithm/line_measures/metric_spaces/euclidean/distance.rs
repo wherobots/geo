@@ -1294,16 +1294,16 @@ where
 
         // Generate the match with explicit left => [right types] mappings
         generate_distance_match!(
-            Point => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Line => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            LineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Polygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Triangle => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Rect => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            MultiPoint => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            MultiLineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            MultiPolygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            GeometryCollection => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+            Point => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+            Line => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+            LineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+            Polygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+            Triangle => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+            Rect => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+            MultiPoint => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+            MultiLineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+            MultiPolygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
+            GeometryCollection => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
         )
     }
 }
