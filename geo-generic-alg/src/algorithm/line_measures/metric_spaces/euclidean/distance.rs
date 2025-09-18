@@ -1137,7 +1137,38 @@ impl_distance_geometry_collection_from_geometry!(MultiLineStringTraitExt, MultiL
 impl_distance_geometry_collection_from_geometry!(MultiPolygonTraitExt, MultiPolygonTag);
 impl_distance_geometry_collection_from_geometry!(RectTraitExt, RectTag);
 impl_distance_geometry_collection_from_geometry!(TriangleTraitExt, TriangleTag);
-impl_distance_geometry_collection_from_geometry!(GeometryCollectionTraitExt, GeometryCollectionTag);
+// impl_distance_geometry_collection_from_geometry!(GeometryCollectionTraitExt, GeometryCollectionTag);
+// Special implementation for GeometryCollection to GeometryCollection to avoid infinite recursion
+impl<F, LHS, RHS> GenericDistanceTrait<F, GeometryCollectionTag, GeometryCollectionTag, RHS> for LHS
+where
+    F: GeoFloat,
+    LHS: GeometryCollectionTraitExt<T = F>,
+    RHS: GeometryCollectionTraitExt<T = F>,
+{
+    fn generic_distance_trait(&self, rhs: &RHS) -> F {
+        use num_traits::Bounded;
+
+        // Calculate minimum distance between any geometry in LHS and any geometry in RHS
+        let mut min_distance = <F as Bounded>::max_value();
+
+        for lhs_geom in self.geometries_ext() {
+            for rhs_geom in rhs.geometries_ext() {
+                // Convert to concrete geometries to avoid trait bound issues
+                let lhs_concrete = lhs_geom.to_geometry();
+                let rhs_concrete = rhs_geom.to_geometry();
+                let distance = Euclidean.distance(&lhs_concrete, &rhs_concrete);
+                min_distance = min_distance.min(distance);
+
+                // Early exit optimization
+                if distance == F::zero() {
+                    return F::zero();
+                }
+            }
+        }
+
+        min_distance
+    }
+}
 
 symmetric_distance_ext_trait_impl!(
     GeoFloat,
@@ -2408,6 +2439,79 @@ mod tests {
             let test_gc = GeometryCollection(vec![Geometry::Rect(test_rect)]);
             let distance_gc_gc = Euclidean.distance(&test_gc, &gc);
             assert_relative_eq!(distance_gc_gc, 60.959002616512684);
+        }
+
+        #[test]
+        fn test_original_issue_verification() {
+            // This test verifies the fix for the segmentation fault issue reported in SedonaDB:
+            // "python/sedonadb/tests/functions/test_predicates.py::test_st_dwithin[
+            //  GEOMETRYCOLLECTION (POINT (0 0), LINESTRING (0 0, 1 1))-
+            //  GEOMETRYCOLLECTION (POINT (0 0), LINESTRING (0 0, 1 1))-1-True-SedonaDB]
+            //  Fatal Python error: Segmentation fault"
+
+            let point = Point::new(0.0, 0.0);
+            let linestring = LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]);
+
+            let gc1 = GeometryCollection(vec![
+                Geometry::Point(point.clone()),
+                Geometry::LineString(linestring.clone()),
+            ]);
+
+            let gc2 = GeometryCollection(vec![
+                Geometry::Point(point),
+                Geometry::LineString(linestring),
+            ]);
+
+            // Before our fix: This would cause infinite recursion because:
+            // 1. GeometryCollection calls distance_ext on each geometry
+            // 2. When geometry is another GeometryCollection, it calls distance_ext again
+            // 3. This triggers the same GeometryCollection implementation → infinite recursion
+            // 4. Stack overflow → segmentation fault
+
+            // Let's trace which implementation is actually being called
+            println!("🔍 Testing GeometryCollection distance calculation...");
+
+            // Test the concrete Distance API
+            let distance = Euclidean.distance(&gc1, &gc2);
+            println!("📊 Concrete Distance result: {}", distance);
+            assert_eq!(distance, 0.0, "Distance between identical GeometryCollections should be 0");
+
+            // Test the generic distance_ext API directly (this should trigger the problematic path)
+            use crate::line_measures::DistanceExt;
+            let distance_ext = gc1.distance_ext(&gc2);
+            println!("📊 Generic distance_ext result: {}", distance_ext);
+            assert_eq!(distance_ext, 0.0, "Generic distance should also be 0");
+
+            println!("✅ Both implementations completed without segfault");
+        }
+
+        #[test]
+        fn test_force_generic_trait_recursion() {
+            // Force usage of the generic trait implementation directly
+            use geo_traits_ext::GeometryCollectionTraitExt;
+
+            let point = Point::new(0.0, 0.0);
+            let linestring = LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]);
+
+            let gc1 = GeometryCollection(vec![
+                Geometry::Point(point.clone()),
+                Geometry::LineString(linestring.clone()),
+            ]);
+
+            let gc2 = GeometryCollection(vec![
+                Geometry::Point(point),
+                Geometry::LineString(linestring),
+            ]);
+
+            // This should directly call the problematic GenericDistanceTrait implementation
+            // for GeometryCollectionTag -> GeometryCollectionTag
+            println!("🔍 Calling generic distance trait directly...");
+
+            // Force the generic trait path by calling distance_ext on trait objects
+            let distance_result = gc1.distance_ext(&gc2);
+
+            println!("📊 Result: {}", distance_result);
+            assert_eq!(distance_result, 0.0);
         }
     }
 }
