@@ -2467,7 +2467,10 @@ mod tests {
 
             // Test the concrete Distance API
             let distance = Euclidean.distance(&gc1, &gc2);
-            assert_eq!(distance, 0.0, "Distance between identical GeometryCollections should be 0");
+            assert_eq!(
+                distance, 0.0,
+                "Distance between identical GeometryCollections should be 0"
+            );
 
             // Test the generic distance_ext API directly (this should trigger the problematic path)
             use crate::line_measures::DistanceExt;
