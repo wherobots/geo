@@ -2450,7 +2450,7 @@ mod tests {
             let linestring = LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]);
 
             let gc1 = GeometryCollection(vec![
-                Geometry::Point(point.clone()),
+                Geometry::Point(point),
                 Geometry::LineString(linestring.clone()),
             ]);
 
@@ -2484,7 +2484,7 @@ mod tests {
             let linestring = LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]);
 
             let gc1 = GeometryCollection(vec![
-                Geometry::Point(point.clone()),
+                Geometry::Point(point),
                 Geometry::LineString(linestring.clone()),
             ]);
 
