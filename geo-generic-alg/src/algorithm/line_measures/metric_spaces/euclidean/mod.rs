@@ -1,4 +1,5 @@
 mod distance;
+mod utils;
 pub use distance::DistanceExt;
 
 use super::super::{Distance, InterpolatePoint};
