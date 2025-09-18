@@ -2446,11 +2446,6 @@ mod tests {
         #[test]
         fn test_original_issue_verification() {
             // This test verifies the fix for the segmentation fault issue reported in SedonaDB:
-            // "python/sedonadb/tests/functions/test_predicates.py::test_st_dwithin[
-            //  GEOMETRYCOLLECTION (POINT (0 0), LINESTRING (0 0, 1 1))-
-            //  GEOMETRYCOLLECTION (POINT (0 0), LINESTRING (0 0, 1 1))-1-True-SedonaDB]
-            //  Fatal Python error: Segmentation fault"
-
             let point = Point::new(0.0, 0.0);
             let linestring = LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]);
 
@@ -2470,28 +2465,18 @@ mod tests {
             // 3. This triggers the same GeometryCollection implementation → infinite recursion
             // 4. Stack overflow → segmentation fault
 
-            // Let's trace which implementation is actually being called
-            println!("🔍 Testing GeometryCollection distance calculation...");
-
             // Test the concrete Distance API
             let distance = Euclidean.distance(&gc1, &gc2);
-            println!("📊 Concrete Distance result: {}", distance);
             assert_eq!(distance, 0.0, "Distance between identical GeometryCollections should be 0");
 
             // Test the generic distance_ext API directly (this should trigger the problematic path)
             use crate::line_measures::DistanceExt;
             let distance_ext = gc1.distance_ext(&gc2);
-            println!("📊 Generic distance_ext result: {}", distance_ext);
             assert_eq!(distance_ext, 0.0, "Generic distance should also be 0");
-
-            println!("✅ Both implementations completed without segfault");
         }
 
         #[test]
         fn test_force_generic_trait_recursion() {
-            // Force usage of the generic trait implementation directly
-            use geo_traits_ext::GeometryCollectionTraitExt;
-
             let point = Point::new(0.0, 0.0);
             let linestring = LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]);
 
@@ -2505,14 +2490,8 @@ mod tests {
                 Geometry::LineString(linestring),
             ]);
 
-            // This should directly call the problematic GenericDistanceTrait implementation
-            // for GeometryCollectionTag -> GeometryCollectionTag
-            println!("🔍 Calling generic distance trait directly...");
-
             // Force the generic trait path by calling distance_ext on trait objects
             let distance_result = gc1.distance_ext(&gc2);
-
-            println!("📊 Result: {}", distance_result);
             assert_eq!(distance_result, 0.0);
         }
     }
