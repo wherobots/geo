@@ -1120,6 +1120,9 @@ macro_rules! impl_distance_geometry_collection_from_geometry {
             fn generic_distance_trait(&self, rhs: &RHS) -> F {
                 use num_traits::Bounded;
 
+                // Use distance_ext which will route through the appropriate implementations
+                // The key insight is that this works for all geometry types except GeometryCollection,
+                // where we need special handling to avoid infinite recursion
                 self.geometries_ext()
                     .map(|geom| geom.distance_ext(rhs))
                     .fold(Bounded::max_value(), |acc, dist| acc.min(dist))
@@ -1137,8 +1140,7 @@ impl_distance_geometry_collection_from_geometry!(MultiLineStringTraitExt, MultiL
 impl_distance_geometry_collection_from_geometry!(MultiPolygonTraitExt, MultiPolygonTag);
 impl_distance_geometry_collection_from_geometry!(RectTraitExt, RectTag);
 impl_distance_geometry_collection_from_geometry!(TriangleTraitExt, TriangleTag);
-// impl_distance_geometry_collection_from_geometry!(GeometryCollectionTraitExt, GeometryCollectionTag);
-// Special implementation for GeometryCollection to GeometryCollection to avoid infinite recursion
+// Manual implementation for GeometryCollection to GeometryCollection to avoid infinite recursion
 impl<F, LHS, RHS> GenericDistanceTrait<F, GeometryCollectionTag, GeometryCollectionTag, RHS> for LHS
 where
     F: GeoFloat,
@@ -1148,12 +1150,12 @@ where
     fn generic_distance_trait(&self, rhs: &RHS) -> F {
         use num_traits::Bounded;
 
-        // Calculate minimum distance between any geometry in LHS and any geometry in RHS
         let mut min_distance = <F as Bounded>::max_value();
 
         for lhs_geom in self.geometries_ext() {
             for rhs_geom in rhs.geometries_ext() {
-                // Convert to concrete geometries to avoid trait bound issues
+                // Convert to concrete types for this specific case only
+                // This avoids the trait bound complexity while still using generic traits everywhere else
                 let lhs_concrete = lhs_geom.to_geometry();
                 let rhs_concrete = rhs_geom.to_geometry();
                 let distance = Euclidean.distance(&lhs_concrete, &rhs_concrete);
