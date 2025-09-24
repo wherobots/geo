@@ -824,10 +824,15 @@ mod test {
         let triangle = Triangle::new((0.0, 0.0).into(), (5.0, 10.0).into(), (10.0, 0.0).into());
         let rect = Rect::new((0.0, 0.0), (10.0, 10.0));
         let collection = GeometryCollection::new_from(vec![triangle.into(), rect.into()]);
+        let geom = Geometry::GeometryCollection(collection.clone());
 
         //  outside of both
         assert_eq!(
             collection.coordinate_position(&coord! { x: 15.0, y: 15.0 }),
+            CoordPos::Outside
+        );
+        assert_eq!(
+            geom.coordinate_position(&coord! { x: 15.0, y: 15.0 }),
             CoordPos::Outside
         );
 
@@ -836,16 +841,28 @@ mod test {
             collection.coordinate_position(&coord! { x: 5.0, y: 5.0 }),
             CoordPos::Inside
         );
+        assert_eq!(
+            geom.coordinate_position(&coord! { x: 5.0, y: 5.0 }),
+            CoordPos::Inside
+        );
 
         // inside one, boundary of other
         assert_eq!(
             collection.coordinate_position(&coord! { x: 2.5, y: 5.0 }),
             CoordPos::OnBoundary
         );
+        assert_eq!(
+            geom.coordinate_position(&coord! { x: 2.5, y: 5.0 }),
+            CoordPos::OnBoundary
+        );
 
         //  boundary of both
         assert_eq!(
             collection.coordinate_position(&coord! { x: 5.0, y: 10.0 }),
+            CoordPos::Outside
+        );
+        assert_eq!(
+            geom.coordinate_position(&coord! { x: 5.0, y: 10.0 }),
             CoordPos::Outside
         );
     }

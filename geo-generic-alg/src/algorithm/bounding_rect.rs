@@ -402,5 +402,13 @@ mod test {
             ])
             .bounding_rect(),
         );
+        assert_eq!(
+            Some(Rect::new(coord! { x: 0., y: 0. }, coord! { x: 1., y: 2. })),
+            Geometry::GeometryCollection(GeometryCollection::new_from(vec![
+                Geometry::Point(point! { x: 0., y: 0. }),
+                Geometry::Point(point! { x: 1., y: 2. }),
+            ]))
+            .bounding_rect(),
+        );
     }
 }

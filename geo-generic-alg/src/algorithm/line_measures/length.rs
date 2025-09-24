@@ -391,62 +391,14 @@ where
 {
     fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         self.geometries_ext()
-            .map(|g| geometry_length(g.borrow(), metric_space))
+            .map(|g| g.borrow().length_trait(metric_space))
             .fold(F::zero(), |acc, next| acc + next)
     }
 
     fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         self.geometries_ext()
-            .map(|g| geometry_perimeter(g.borrow(), metric_space))
+            .map(|g| g.borrow().perimeter_trait(metric_space))
             .fold(F::zero(), |acc, next| acc + next)
-    }
-}
-
-fn geometry_length<F, G>(g: &G, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F
-where
-    F: CoordFloat,
-    G: GeometryTraitExt<T = F>,
-{
-    if g.is_collection() {
-        g.geometries_ext()
-            .map(|g_inner| geometry_length(g_inner.borrow(), metric_space))
-            .fold(F::zero(), |acc, next| acc + next)
-    } else {
-        match g.as_type_ext() {
-            GeometryTypeExt::Point(_) => F::zero(),
-            GeometryTypeExt::Line(line) => line.length_trait(metric_space),
-            GeometryTypeExt::LineString(ls) => ls.length_trait(metric_space),
-            GeometryTypeExt::Polygon(_) => F::zero(),
-            GeometryTypeExt::MultiPoint(_) => F::zero(),
-            GeometryTypeExt::MultiLineString(mls) => mls.length_trait(metric_space),
-            GeometryTypeExt::MultiPolygon(_) => F::zero(),
-            GeometryTypeExt::Rect(_) => F::zero(),
-            GeometryTypeExt::Triangle(_) => F::zero(),
-        }
-    }
-}
-
-fn geometry_perimeter<F, G>(g: &G, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F
-where
-    F: CoordFloat,
-    G: GeometryTraitExt<T = F>,
-{
-    if g.is_collection() {
-        g.geometries_ext()
-            .map(|g_inner| geometry_perimeter(g_inner.borrow(), metric_space))
-            .fold(F::zero(), |acc, next| acc + next)
-    } else {
-        match g.as_type_ext() {
-            GeometryTypeExt::Point(_) => F::zero(),
-            GeometryTypeExt::Line(_) => F::zero(), // 1D geometry - no perimeter
-            GeometryTypeExt::LineString(_) => F::zero(), // 1D geometry - no perimeter
-            GeometryTypeExt::Polygon(polygon) => polygon.perimeter_trait(metric_space),
-            GeometryTypeExt::MultiPoint(_) => F::zero(),
-            GeometryTypeExt::MultiLineString(_) => F::zero(), // 1D geometry - no perimeter
-            GeometryTypeExt::MultiPolygon(mp) => mp.perimeter_trait(metric_space),
-            GeometryTypeExt::Rect(rect) => rect.perimeter_trait(metric_space),
-            GeometryTypeExt::Triangle(triangle) => triangle.perimeter_trait(metric_space),
-        }
     }
 }
 
@@ -455,11 +407,43 @@ where
     F: CoordFloat,
 {
     fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
-        geometry_length(self, metric_space)
+        if self.is_collection() {
+            self.geometries_ext()
+                .map(|g_inner| g_inner.borrow().length_trait(metric_space))
+                .fold(F::zero(), |acc, next| acc + next)
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(_) => F::zero(),
+                GeometryTypeExt::Line(line) => line.length_trait(metric_space),
+                GeometryTypeExt::LineString(ls) => ls.length_trait(metric_space),
+                GeometryTypeExt::Polygon(_) => F::zero(),
+                GeometryTypeExt::MultiPoint(_) => F::zero(),
+                GeometryTypeExt::MultiLineString(mls) => mls.length_trait(metric_space),
+                GeometryTypeExt::MultiPolygon(_) => F::zero(),
+                GeometryTypeExt::Rect(_) => F::zero(),
+                GeometryTypeExt::Triangle(_) => F::zero(),
+            }
+        }
     }
 
     fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
-        geometry_perimeter(self, metric_space)
+        if self.is_collection() {
+            self.geometries_ext()
+                .map(|g_inner| g_inner.borrow().perimeter_trait(metric_space))
+                .fold(F::zero(), |acc, next| acc + next)
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(_) => F::zero(),
+                GeometryTypeExt::Line(_) => F::zero(), // 1D geometry - no perimeter
+                GeometryTypeExt::LineString(_) => F::zero(), // 1D geometry - no perimeter
+                GeometryTypeExt::Polygon(polygon) => polygon.perimeter_trait(metric_space),
+                GeometryTypeExt::MultiPoint(_) => F::zero(),
+                GeometryTypeExt::MultiLineString(_) => F::zero(), // 1D geometry - no perimeter
+                GeometryTypeExt::MultiPolygon(mp) => mp.perimeter_trait(metric_space),
+                GeometryTypeExt::Rect(rect) => rect.perimeter_trait(metric_space),
+                GeometryTypeExt::Triangle(triangle) => triangle.perimeter_trait(metric_space),
+            }
+        }
     }
 }
 
@@ -709,6 +693,13 @@ mod tests {
                 2.8284271247461903, // 2*sqrt(2) only from linestrings
                 epsilon = 1e-10
             );
+
+            // GEOMETRY representation of GEOMETRYCOLLECTION
+            assert_relative_eq!(
+                Geometry::GeometryCollection(collection.clone()).length_ext(&Euclidean),
+                2.8284271247461903, // 2*sqrt(2) only from linestrings
+                epsilon = 1e-10
+            );
         }
 
         #[test]
@@ -794,6 +785,13 @@ mod tests {
             ]);
             assert_relative_eq!(
                 collection.perimeter_ext(&Euclidean),
+                4.0, // only polygon perimeter counts
+                epsilon = 1e-10
+            );
+
+            // GEOMETRY representation of GEOMETRYCOLLECTION
+            assert_relative_eq!(
+                Geometry::GeometryCollection(collection).perimeter_ext(&Euclidean),
                 4.0, // only polygon perimeter counts
                 epsilon = 1e-10
             );

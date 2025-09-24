@@ -983,30 +983,6 @@ where
     }
 }
 
-fn geometry_coords_count<T, G>(g: &G) -> usize
-where
-    T: CoordNum,
-    G: GeometryTraitExt<T = T>,
-{
-    if g.is_collection() {
-        g.geometries_ext()
-            .map(|g_inner| geometry_coords_count(g_inner.borrow()))
-            .sum()
-    } else {
-        match g.as_type_ext() {
-            GeometryTypeExt::Point(g) => g.coords_count_trait(),
-            GeometryTypeExt::Line(g) => g.coords_count_trait(),
-            GeometryTypeExt::LineString(g) => g.coords_count_trait(),
-            GeometryTypeExt::Polygon(g) => g.coords_count_trait(),
-            GeometryTypeExt::MultiPoint(g) => g.coords_count_trait(),
-            GeometryTypeExt::MultiLineString(g) => g.coords_count_trait(),
-            GeometryTypeExt::MultiPolygon(g) => g.coords_count_trait(),
-            GeometryTypeExt::Rect(g) => g.coords_count_trait(),
-            GeometryTypeExt::Triangle(g) => g.coords_count_trait(),
-        }
-    }
-}
-
 // ┌─────────────────────────────┐
 // │ Implementation for Geometry │
 // └─────────────────────────────┘
@@ -1064,7 +1040,23 @@ where
 
     /// Return the number of coordinates in the `Geometry`.
     fn coords_count_trait(&self) -> usize {
-        geometry_coords_count(self)
+        if self.is_collection() {
+            self.geometries_ext()
+                .map(|g_inner| g_inner.borrow().coords_count_trait())
+                .sum()
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(g) => g.coords_count_trait(),
+                GeometryTypeExt::Line(g) => g.coords_count_trait(),
+                GeometryTypeExt::LineString(g) => g.coords_count_trait(),
+                GeometryTypeExt::Polygon(g) => g.coords_count_trait(),
+                GeometryTypeExt::MultiPoint(g) => g.coords_count_trait(),
+                GeometryTypeExt::MultiLineString(g) => g.coords_count_trait(),
+                GeometryTypeExt::MultiPolygon(g) => g.coords_count_trait(),
+                GeometryTypeExt::Rect(g) => g.coords_count_trait(),
+                GeometryTypeExt::Triangle(g) => g.coords_count_trait(),
+            }
+        }
     }
 
     fn exterior_coords_iter_trait(&self) -> Self::ExteriorIter<'_> {
@@ -1262,11 +1254,6 @@ where
     MultiPolygon(
         <G::MultiPolygonTypeExt<'a> as CoordsIterTrait<MultiPolygonTag>>::ExteriorIter<'a>,
     ),
-    // GeometryCollection(
-    //     <G::GeometryCollectionTypeExt<'a> as CoordsIterTrait<GeometryCollectionTag>>::ExteriorIter<
-    //         'a,
-    //     >,
-    // ),
     GeometryCollection(
         std::vec::IntoIter<Coord<G::T>>,
     ),
@@ -1438,13 +1425,16 @@ mod test {
         let (polygon, mut coords) = create_polygon();
         expected_coords.append(&mut coords);
 
-        let actual_coords = GeometryCollection::new_from(vec![
+        let collection = GeometryCollection::new_from(vec![
             Geometry::LineString(line_string),
             Geometry::Polygon(polygon),
-        ])
-        .coords_iter()
-        .collect::<Vec<_>>();
+        ]);
+        let geom = Geometry::GeometryCollection(collection.clone());
 
+        let actual_coords = collection.coords_iter().collect::<Vec<_>>();
+        assert_eq!(expected_coords, actual_coords);
+
+        let actual_coords = geom.coords_iter().collect::<Vec<_>>();
         assert_eq!(expected_coords, actual_coords);
     }
 

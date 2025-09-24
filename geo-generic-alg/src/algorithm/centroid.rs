@@ -384,33 +384,6 @@ where
     }
 }
 
-fn geometry_centroid<T, G>(g: &G) -> Option<Point<T>>
-where
-    T: GeoFloat,
-    G: GeometryTraitExt<T = T>,
-{
-    if g.is_collection() {
-        // Handle geometry collection by computing weighted centroid
-        let mut operation = CentroidOperation::new();
-        for g_inner in g.geometries_ext() {
-            operation.add_geometry(g_inner.borrow());
-        }
-        operation.centroid()
-    } else {
-        match g.as_type_ext() {
-            GeometryTypeExt::Point(g) => Some(g.centroid_trait()),
-            GeometryTypeExt::Line(g) => Some(g.centroid_trait()),
-            GeometryTypeExt::LineString(g) => g.centroid_trait(),
-            GeometryTypeExt::Polygon(g) => g.centroid_trait(),
-            GeometryTypeExt::MultiPoint(g) => g.centroid_trait(),
-            GeometryTypeExt::MultiLineString(g) => g.centroid_trait(),
-            GeometryTypeExt::MultiPolygon(g) => g.centroid_trait(),
-            GeometryTypeExt::Rect(g) => Some(g.centroid_trait()),
-            GeometryTypeExt::Triangle(g) => Some(g.centroid_trait()),
-        }
-    }
-}
-
 impl<T, G> CentroidTrait<GeometryTag> for G
 where
     T: GeoFloat,
@@ -443,7 +416,26 @@ where
     /// );
     /// ```
     fn centroid_trait(&self) -> Self::Output {
-        geometry_centroid(self)
+        if self.is_collection() {
+            // Handle geometry collection by computing weighted centroid
+            let mut operation = CentroidOperation::new();
+            for g_inner in self.geometries_ext() {
+                operation.add_geometry(g_inner.borrow());
+            }
+            operation.centroid()
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(g) => Some(g.centroid_trait()),
+                GeometryTypeExt::Line(g) => Some(g.centroid_trait()),
+                GeometryTypeExt::LineString(g) => g.centroid_trait(),
+                GeometryTypeExt::Polygon(g) => g.centroid_trait(),
+                GeometryTypeExt::MultiPoint(g) => g.centroid_trait(),
+                GeometryTypeExt::MultiLineString(g) => g.centroid_trait(),
+                GeometryTypeExt::MultiPolygon(g) => g.centroid_trait(),
+                GeometryTypeExt::Rect(g) => Some(g.centroid_trait()),
+                GeometryTypeExt::Triangle(g) => Some(g.centroid_trait()),
+            }
+        }
     }
 }
 
