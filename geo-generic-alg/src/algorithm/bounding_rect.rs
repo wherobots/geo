@@ -240,11 +240,11 @@ where
             match self.as_type_ext() {
                 GeometryTypeExt::Point(g) => g.bounding_rect_trait().into(),
                 GeometryTypeExt::Line(g) => g.bounding_rect_trait().into(),
-                GeometryTypeExt::LineString(g) => g.bounding_rect_trait().into(),
-                GeometryTypeExt::Polygon(g) => g.bounding_rect_trait().into(),
-                GeometryTypeExt::MultiPoint(g) => g.bounding_rect_trait().into(),
-                GeometryTypeExt::MultiLineString(g) => g.bounding_rect_trait().into(),
-                GeometryTypeExt::MultiPolygon(g) => g.bounding_rect_trait().into(),
+                GeometryTypeExt::LineString(g) => g.bounding_rect_trait(),
+                GeometryTypeExt::Polygon(g) => g.bounding_rect_trait(),
+                GeometryTypeExt::MultiPoint(g) => g.bounding_rect_trait(),
+                GeometryTypeExt::MultiLineString(g) => g.bounding_rect_trait(),
+                GeometryTypeExt::MultiPolygon(g) => g.bounding_rect_trait(),
                 GeometryTypeExt::Rect(g) => g.bounding_rect_trait().into(),
                 GeometryTypeExt::Triangle(g) => g.bounding_rect_trait().into(),
             }
