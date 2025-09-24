@@ -600,9 +600,9 @@ where
                 Geometry::MultiLineString(x.map_coords_trait(func))
             }
             GeometryTypeExt::MultiPolygon(x) => Geometry::MultiPolygon(x.map_coords_trait(func)),
-            GeometryTypeExt::GeometryCollection(x) => {
-                Geometry::GeometryCollection(x.map_coords_trait(func))
-            }
+            // GeometryTypeExt::GeometryCollection(x) => {
+            //     Geometry::GeometryCollection(x.map_coords_trait(func))
+            // }
             GeometryTypeExt::Rect(x) => Geometry::Rect(x.map_coords_trait(func)),
             GeometryTypeExt::Triangle(x) => Geometry::Triangle(x.map_coords_trait(func)),
         }
@@ -628,9 +628,9 @@ where
             GeometryTypeExt::MultiPolygon(x) => {
                 Ok(Geometry::MultiPolygon(x.try_map_coords_trait(func)?))
             }
-            GeometryTypeExt::GeometryCollection(x) => {
-                Ok(Geometry::GeometryCollection(x.try_map_coords_trait(func)?))
-            }
+            // GeometryTypeExt::GeometryCollection(x) => {
+            //     Ok(Geometry::GeometryCollection(x.try_map_coords_trait(func)?))
+            // }
             GeometryTypeExt::Rect(x) => Ok(Geometry::Rect(x.try_map_coords_trait(func)?)),
             GeometryTypeExt::Triangle(x) => Ok(Geometry::Triangle(x.try_map_coords_trait(func)?)),
         }

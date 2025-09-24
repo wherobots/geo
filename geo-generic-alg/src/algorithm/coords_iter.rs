@@ -1019,9 +1019,9 @@ where
             GeometryTypeExt::MultiPolygon(g) => {
                 GeometryTraitCoordsIter::MultiPolygon(g.coords_iter_trait())
             }
-            GeometryTypeExt::GeometryCollection(g) => {
-                GeometryTraitCoordsIter::GeometryCollection(g.coords_iter_trait())
-            }
+            // GeometryTypeExt::GeometryCollection(g) => {
+            //     GeometryTraitCoordsIter::GeometryCollection(g.coords_iter_trait())
+            // }
             GeometryTypeExt::Rect(g) => GeometryTraitCoordsIter::Rect(g.coords_iter_trait()),
             GeometryTypeExt::Triangle(g) => {
                 GeometryTraitCoordsIter::Triangle(g.coords_iter_trait())
@@ -1057,9 +1057,9 @@ where
             GeometryTypeExt::MultiPolygon(g) => {
                 GeometryTraitExteriorCoordsIter::MultiPolygon(g.exterior_coords_iter_trait())
             }
-            GeometryTypeExt::GeometryCollection(g) => {
-                GeometryTraitExteriorCoordsIter::GeometryCollection(g.exterior_coords_iter_trait())
-            }
+            // GeometryTypeExt::GeometryCollection(g) => {
+            //     GeometryTraitExteriorCoordsIter::GeometryCollection(g.exterior_coords_iter_trait())
+            // }
             GeometryTypeExt::Rect(g) => {
                 GeometryTraitExteriorCoordsIter::Rect(g.exterior_coords_iter_trait())
             }
@@ -1162,9 +1162,9 @@ where
         <G::MultiLineStringTypeExt<'a> as CoordsIterTrait<MultiLineStringTag>>::Iter<'a>,
     ),
     MultiPolygon(<G::MultiPolygonTypeExt<'a> as CoordsIterTrait<MultiPolygonTag>>::Iter<'a>),
-    GeometryCollection(
-        <G::GeometryCollectionTypeExt<'a> as CoordsIterTrait<GeometryCollectionTag>>::Iter<'a>,
-    ),
+    // GeometryCollection(
+    //     <G::GeometryCollectionTypeExt<'a> as CoordsIterTrait<GeometryCollectionTag>>::Iter<'a>,
+    // ),
     Rect(<G::RectTypeExt<'a> as CoordsIterTrait<RectTag>>::Iter<'a>),
     Triangle(<G::TriangleTypeExt<'a> as CoordsIterTrait<TriangleTag>>::Iter<'a>),
 }
@@ -1184,7 +1184,7 @@ where
             GeometryTraitCoordsIter::MultiPoint(g) => g.next(),
             GeometryTraitCoordsIter::MultiLineString(g) => g.next(),
             GeometryTraitCoordsIter::MultiPolygon(g) => g.next(),
-            GeometryTraitCoordsIter::GeometryCollection(g) => g.next(),
+            // GeometryTraitCoordsIter::GeometryCollection(g) => g.next(),
             GeometryTraitCoordsIter::Rect(g) => g.next(),
             GeometryTraitCoordsIter::Triangle(g) => g.next(),
         }
@@ -1199,7 +1199,7 @@ where
             GeometryTraitCoordsIter::MultiPoint(g) => g.size_hint(),
             GeometryTraitCoordsIter::MultiLineString(g) => g.size_hint(),
             GeometryTraitCoordsIter::MultiPolygon(g) => g.size_hint(),
-            GeometryTraitCoordsIter::GeometryCollection(g) => g.size_hint(),
+            // GeometryTraitCoordsIter::GeometryCollection(g) => g.size_hint(),
             GeometryTraitCoordsIter::Rect(g) => g.size_hint(),
             GeometryTraitCoordsIter::Triangle(g) => g.size_hint(),
         }
@@ -1223,11 +1223,11 @@ where
     MultiPolygon(
         <G::MultiPolygonTypeExt<'a> as CoordsIterTrait<MultiPolygonTag>>::ExteriorIter<'a>,
     ),
-    GeometryCollection(
-        <G::GeometryCollectionTypeExt<'a> as CoordsIterTrait<GeometryCollectionTag>>::ExteriorIter<
-            'a,
-        >,
-    ),
+    // GeometryCollection(
+    //     <G::GeometryCollectionTypeExt<'a> as CoordsIterTrait<GeometryCollectionTag>>::ExteriorIter<
+    //         'a,
+    //     >,
+    // ),
     Rect(<G::RectTypeExt<'a> as CoordsIterTrait<RectTag>>::ExteriorIter<'a>),
     Triangle(<G::TriangleTypeExt<'a> as CoordsIterTrait<TriangleTag>>::ExteriorIter<'a>),
 }
@@ -1247,7 +1247,7 @@ where
             GeometryTraitExteriorCoordsIter::MultiPoint(g) => g.next(),
             GeometryTraitExteriorCoordsIter::MultiLineString(g) => g.next(),
             GeometryTraitExteriorCoordsIter::MultiPolygon(g) => g.next(),
-            GeometryTraitExteriorCoordsIter::GeometryCollection(g) => g.next(),
+            // GeometryTraitExteriorCoordsIter::GeometryCollection(g) => g.next(),
             GeometryTraitExteriorCoordsIter::Rect(g) => g.next(),
             GeometryTraitExteriorCoordsIter::Triangle(g) => g.next(),
         }
@@ -1262,7 +1262,7 @@ where
             GeometryTraitExteriorCoordsIter::MultiPoint(g) => g.size_hint(),
             GeometryTraitExteriorCoordsIter::MultiLineString(g) => g.size_hint(),
             GeometryTraitExteriorCoordsIter::MultiPolygon(g) => g.size_hint(),
-            GeometryTraitExteriorCoordsIter::GeometryCollection(g) => g.size_hint(),
+            // GeometryTraitExteriorCoordsIter::GeometryCollection(g) => g.size_hint(),
             GeometryTraitExteriorCoordsIter::Rect(g) => g.size_hint(),
             GeometryTraitExteriorCoordsIter::Triangle(g) => g.size_hint(),
         }

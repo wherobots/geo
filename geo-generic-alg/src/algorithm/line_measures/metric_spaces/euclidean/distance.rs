@@ -2,7 +2,7 @@ use super::{Distance, Euclidean};
 use crate::algorithm::Intersects;
 use crate::geometry::*;
 use crate::{Coord, CoordFloat, GeoFloat, Point};
-use geo_traits::to_geo::ToGeoGeometry;
+// use geo_traits::to_geo::ToGeoGeometry;
 use num_traits::{Bounded, Float};
 
 // Import all the utility functions from utils module
@@ -1148,27 +1148,28 @@ where
     RHS: GeometryCollectionTraitExt<T = F>,
 {
     fn generic_distance_trait(&self, rhs: &RHS) -> F {
-        use num_traits::Bounded;
+        // use num_traits::Bounded;
 
-        let mut min_distance = <F as Bounded>::max_value();
+        // let mut min_distance = <F as Bounded>::max_value();
 
-        for lhs_geom in self.geometries_ext() {
-            for rhs_geom in rhs.geometries_ext() {
-                // Convert to concrete types for this specific case only
-                // This avoids the trait bound complexity while still using generic traits everywhere else
-                let lhs_concrete = lhs_geom.to_geometry();
-                let rhs_concrete = rhs_geom.to_geometry();
-                let distance = Euclidean.distance(&lhs_concrete, &rhs_concrete);
-                min_distance = min_distance.min(distance);
+        // for lhs_geom in self.geometries_ext() {
+        //     for rhs_geom in rhs.geometries_ext() {
+        //         // Convert to concrete types for this specific case only
+        //         // This avoids the trait bound complexity while still using generic traits everywhere else
+        //         let lhs_concrete = lhs_geom.to_geometry();
+        //         let rhs_concrete = rhs_geom.to_geometry();
+        //         let distance = Euclidean.distance(&lhs_concrete, &rhs_concrete);
+        //         min_distance = min_distance.min(distance);
 
-                // Early exit optimization
-                if distance == F::zero() {
-                    return F::zero();
-                }
-            }
-        }
+        //         // Early exit optimization
+        //         if distance == F::zero() {
+        //             return F::zero();
+        //         }
+        //     }
+        // }
 
-        min_distance
+        // min_distance
+        unimplemented!()
     }
 }
 
@@ -1283,27 +1284,21 @@ where
                             left.distance_ext(right)
                         },
                     )+)+
-                    _ => {
-                        let g1 = self.to_geometry();
-                        let g2 = rhs.to_geometry();
-                        Euclidean.distance(&g1, &g2)
-                    }
                 }
             };
         }
 
         // Generate the match with explicit left => [right types] mappings
         generate_distance_match!(
-            Point => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
-            Line => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
-            LineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
-            Polygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
-            Triangle => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
-            Rect => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
-            MultiPoint => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
-            MultiLineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
-            MultiPolygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection],
-            GeometryCollection => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Point => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Line => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            LineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Polygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Triangle => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            Rect => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            MultiPoint => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            MultiLineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
+            MultiPolygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
         )
     }
 }

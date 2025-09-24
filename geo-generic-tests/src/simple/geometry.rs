@@ -173,8 +173,29 @@ impl<T: CoordNum> GeometryTrait for SimpleGeometry<T> {
     }
 }
 
-impl<T: CoordNum> GeometryTraitExt for &SimpleGeometry<T> {
+impl<'a, T: CoordNum> GeometryTraitExt for &'a SimpleGeometry<T> {
     forward_geometry_trait_ext_funcs!(T);
+
+    type InnerGeometryRef<'b>
+        = &'a SimpleGeometry<T>
+    where
+        Self: 'b;
+
+    fn geometry_ext(&self, _i: usize) -> Option<Self::InnerGeometryRef<'_>> {
+        None
+    }
+
+    unsafe fn geometry_unchecked_ext(&self, _i: usize) -> Self::InnerGeometryRef<'_> {
+        unimplemented!()
+    }
+
+    fn geometries_ext(&self) -> impl Iterator<Item = Self::InnerGeometryRef<'_>> {
+        unimplemented!();
+
+        // For making the type checker happy
+        #[allow(unreachable_code)]
+        core::iter::empty()
+    }
 }
 
 impl<T: CoordNum> GeoTraitExtWithTypeTag for &SimpleGeometry<T> {
@@ -183,6 +204,27 @@ impl<T: CoordNum> GeoTraitExtWithTypeTag for &SimpleGeometry<T> {
 
 impl<T: CoordNum> GeometryTraitExt for SimpleGeometry<T> {
     forward_geometry_trait_ext_funcs!(T);
+
+    type InnerGeometryRef<'a>
+        = &'a SimpleGeometry<T>
+    where
+        Self: 'a;
+
+    fn geometry_ext(&self, _i: usize) -> Option<Self::InnerGeometryRef<'_>> {
+        None
+    }
+
+    unsafe fn geometry_unchecked_ext(&self, _i: usize) -> Self::InnerGeometryRef<'_> {
+        unimplemented!()
+    }
+
+    fn geometries_ext(&self) -> impl Iterator<Item = Self::InnerGeometryRef<'_>> {
+        unimplemented!();
+
+        // For making the type checker happy
+        #[allow(unreachable_code)]
+        core::iter::empty()
+    }
 }
 
 impl<T: CoordNum> GeoTraitExtWithTypeTag for SimpleGeometry<T> {

@@ -2,6 +2,7 @@ use super::Distance;
 use crate::{CoordFloat, Line, LineString, MultiLineString, Point};
 use geo_traits::{CoordTrait, PolygonTrait};
 use geo_traits_ext::*;
+use std::borrow::Borrow;
 
 /// Calculate the length of a geometry using a given [metric space](crate::algorithm::line_measures::metric_spaces).
 ///
@@ -390,36 +391,62 @@ where
 {
     fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         self.geometries_ext()
-            .map(|g| match g.as_type_ext() {
-                GeometryTypeExt::Point(_) => F::zero(),
-                GeometryTypeExt::Line(line) => line.length_trait(metric_space),
-                GeometryTypeExt::LineString(ls) => ls.length_trait(metric_space),
-                GeometryTypeExt::Polygon(_) => F::zero(),
-                GeometryTypeExt::MultiPoint(_) => F::zero(),
-                GeometryTypeExt::MultiLineString(mls) => mls.length_trait(metric_space),
-                GeometryTypeExt::MultiPolygon(_) => F::zero(),
-                GeometryTypeExt::GeometryCollection(gc) => gc.length_trait(metric_space),
-                GeometryTypeExt::Rect(_) => F::zero(),
-                GeometryTypeExt::Triangle(_) => F::zero(),
-            })
+            .map(|g| geometry_length(g.borrow(), metric_space))
             .fold(F::zero(), |acc, next| acc + next)
     }
 
     fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         self.geometries_ext()
-            .map(|g| match g.as_type_ext() {
-                GeometryTypeExt::Point(_) => F::zero(),
-                GeometryTypeExt::Line(_) => F::zero(), // 1D geometry - no perimeter
-                GeometryTypeExt::LineString(_) => F::zero(), // 1D geometry - no perimeter
-                GeometryTypeExt::Polygon(polygon) => polygon.perimeter_trait(metric_space),
-                GeometryTypeExt::MultiPoint(_) => F::zero(),
-                GeometryTypeExt::MultiLineString(_) => F::zero(), // 1D geometry - no perimeter
-                GeometryTypeExt::MultiPolygon(mp) => mp.perimeter_trait(metric_space),
-                GeometryTypeExt::GeometryCollection(gc) => gc.perimeter_trait(metric_space),
-                GeometryTypeExt::Rect(rect) => rect.perimeter_trait(metric_space),
-                GeometryTypeExt::Triangle(triangle) => triangle.perimeter_trait(metric_space),
-            })
+            .map(|g| geometry_perimeter(g.borrow(), metric_space))
             .fold(F::zero(), |acc, next| acc + next)
+    }
+}
+
+fn geometry_length<F, G>(g: &G, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F
+where
+    F: CoordFloat,
+    G: GeometryTraitExt<T = F>,
+{
+    if g.is_collection() {
+        g.geometries_ext()
+            .map(|g_inner| geometry_length(g_inner.borrow(), metric_space))
+            .fold(F::zero(), |acc, next| acc + next)
+    } else {
+        match g.as_type_ext() {
+            GeometryTypeExt::Point(_) => F::zero(),
+            GeometryTypeExt::Line(line) => line.length_trait(metric_space),
+            GeometryTypeExt::LineString(ls) => ls.length_trait(metric_space),
+            GeometryTypeExt::Polygon(_) => F::zero(),
+            GeometryTypeExt::MultiPoint(_) => F::zero(),
+            GeometryTypeExt::MultiLineString(mls) => mls.length_trait(metric_space),
+            GeometryTypeExt::MultiPolygon(_) => F::zero(),
+            GeometryTypeExt::Rect(_) => F::zero(),
+            GeometryTypeExt::Triangle(_) => F::zero(),
+        }
+    }
+}
+
+fn geometry_perimeter<F, G>(g: &G, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F
+where
+    F: CoordFloat,
+    G: GeometryTraitExt<T = F>,
+{
+    if g.is_collection() {
+        g.geometries_ext()
+            .map(|g_inner| geometry_perimeter(g_inner.borrow(), metric_space))
+            .fold(F::zero(), |acc, next| acc + next)
+    } else {
+        match g.as_type_ext() {
+            GeometryTypeExt::Point(_) => F::zero(),
+            GeometryTypeExt::Line(_) => F::zero(), // 1D geometry - no perimeter
+            GeometryTypeExt::LineString(_) => F::zero(), // 1D geometry - no perimeter
+            GeometryTypeExt::Polygon(polygon) => polygon.perimeter_trait(metric_space),
+            GeometryTypeExt::MultiPoint(_) => F::zero(),
+            GeometryTypeExt::MultiLineString(_) => F::zero(), // 1D geometry - no perimeter
+            GeometryTypeExt::MultiPolygon(mp) => mp.perimeter_trait(metric_space),
+            GeometryTypeExt::Rect(rect) => rect.perimeter_trait(metric_space),
+            GeometryTypeExt::Triangle(triangle) => triangle.perimeter_trait(metric_space),
+        }
     }
 }
 

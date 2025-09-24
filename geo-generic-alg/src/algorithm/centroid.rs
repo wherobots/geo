@@ -670,7 +670,7 @@ impl<T: GeoFloat> CentroidOperation<T> {
             GeometryTypeExt::MultiPoint(g) => self.add_multi_point(g),
             GeometryTypeExt::MultiLineString(g) => self.add_multi_line_string(g),
             GeometryTypeExt::MultiPolygon(g) => self.add_multi_polygon(g),
-            GeometryTypeExt::GeometryCollection(g) => self.add_geometry_collection(g),
+            // GeometryTypeExt::GeometryCollection(g) => self.add_geometry_collection(g),
             GeometryTypeExt::Rect(g) => self.add_rect(g),
             GeometryTypeExt::Triangle(g) => self.add_triangle(g),
         }

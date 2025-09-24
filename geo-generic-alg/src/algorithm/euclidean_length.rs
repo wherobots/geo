@@ -177,7 +177,7 @@ where
                 GeometryTypeExt::MultiPoint(_) => T::zero(),
                 GeometryTypeExt::MultiLineString(mls) => mls.euclidean_length_trait(),
                 GeometryTypeExt::MultiPolygon(_) => T::zero(),
-                GeometryTypeExt::GeometryCollection(gc) => gc.euclidean_length_trait(),
+                // GeometryTypeExt::GeometryCollection(gc) => gc.euclidean_length_trait(),
                 GeometryTypeExt::Rect(_) => T::zero(),
                 GeometryTypeExt::Triangle(_) => T::zero(),
             })
