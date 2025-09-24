@@ -454,18 +454,12 @@ impl<F, G: GeometryTraitExt<T = F>> LengthMeasurableTrait<F, GeometryTag> for G
 where
     F: CoordFloat,
 {
-    // This macro delegates the `length_trait` method to the appropriate geometry variant.
-    // It is critical for WKB (Well-Known Binary) compatibility, ensuring that trait methods
-    // are correctly dispatched for all geometry types when deserializing from WKB.
-    crate::geometry_trait_ext_delegate_impl! {
-        fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F;
+    fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        geometry_length(self, metric_space)
     }
 
-    // This macro delegates the `perimeter_trait` method to the appropriate geometry variant.
-    // It is critical for WKB (Well-Known Binary) compatibility, ensuring that trait methods
-    // are correctly dispatched for all geometry types when deserializing from WKB.
-    crate::geometry_trait_ext_delegate_impl! {
-        fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F;
+    fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        geometry_perimeter(self, metric_space)
     }
 }
 

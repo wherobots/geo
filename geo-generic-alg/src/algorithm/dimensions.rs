@@ -1,4 +1,5 @@
 use geo_traits_ext::*;
+use core::borrow::Borrow;
 
 use crate::Orientation::Collinear;
 use crate::{CoordNum, GeoNum, GeometryCow};
@@ -162,14 +163,109 @@ trait HasDimensionsTrait<G: GeoTypeTag> {
     fn boundary_dimensions_trait(&self) -> Dimensions;
 }
 
+fn geometry_is_empty<C, G>(g: &G) -> bool
+where
+    C: GeoNum,
+    G: GeometryTraitExt<T = C>,
+{
+    if g.is_collection() {
+        if g.num_geometries_ext() == 0 {
+            true
+        } else {
+            g.geometries_ext().all(|g_inner| g_inner.borrow().is_empty_trait())
+        }
+    } else {
+        match g.as_type_ext() {
+            GeometryTypeExt::Point(g) => g.is_empty_trait(),
+            GeometryTypeExt::Line(g) => g.is_empty_trait(),
+            GeometryTypeExt::LineString(g) => g.is_empty_trait(),
+            GeometryTypeExt::Polygon(g) => g.is_empty_trait(),
+            GeometryTypeExt::MultiPoint(g) => g.is_empty_trait(),
+            GeometryTypeExt::MultiLineString(g) => g.is_empty_trait(),
+            GeometryTypeExt::MultiPolygon(g) => g.is_empty_trait(),
+            GeometryTypeExt::Rect(g) => g.is_empty_trait(),
+            GeometryTypeExt::Triangle(g) => g.is_empty_trait(),
+        }
+    }
+}
+
+fn geometry_dimensions<C, G>(g: &G) -> Dimensions
+where
+    C: GeoNum,
+    G: GeometryTraitExt<T = C>,
+{
+    if g.is_collection() {
+        let mut max = Dimensions::Empty;
+        for geom in g.geometries_ext() {
+            let dimensions = geom.borrow().dimensions_trait();
+            if dimensions == Dimensions::TwoDimensional {
+                // short-circuit since we know none can be larger
+                return Dimensions::TwoDimensional;
+            }
+            max = max.max(dimensions)
+        }
+        max
+    } else {
+        match g.as_type_ext() {
+            GeometryTypeExt::Point(g) => g.dimensions_trait(),
+            GeometryTypeExt::Line(g) => g.dimensions_trait(),
+            GeometryTypeExt::LineString(g) => g.dimensions_trait(),
+            GeometryTypeExt::Polygon(g) => g.dimensions_trait(),
+            GeometryTypeExt::MultiPoint(g) => g.dimensions_trait(),
+            GeometryTypeExt::MultiLineString(g) => g.dimensions_trait(),
+            GeometryTypeExt::MultiPolygon(g) => g.dimensions_trait(),
+            GeometryTypeExt::Rect(g) => g.dimensions_trait(),
+            GeometryTypeExt::Triangle(g) => g.dimensions_trait(),
+        }
+    }
+}
+
+fn geometry_boundary_dimensions<C, G>(g: &G) -> Dimensions
+where
+    C: GeoNum,
+    G: GeometryTraitExt<T = C>,
+{
+    if g.is_collection() {
+        let mut max = Dimensions::Empty;
+        for geom in g.geometries_ext() {
+            let d = geom.borrow().boundary_dimensions_trait();
+
+            if d == Dimensions::OneDimensional {
+                return Dimensions::OneDimensional;
+            }
+
+            max = max.max(d);
+        }
+        max
+    } else {
+        match g.as_type_ext() {
+            GeometryTypeExt::Point(g) => g.boundary_dimensions_trait(),
+            GeometryTypeExt::Line(g) => g.boundary_dimensions_trait(),
+            GeometryTypeExt::LineString(g) => g.boundary_dimensions_trait(),
+            GeometryTypeExt::Polygon(g) => g.boundary_dimensions_trait(),
+            GeometryTypeExt::MultiPoint(g) => g.boundary_dimensions_trait(),
+            GeometryTypeExt::MultiLineString(g) => g.boundary_dimensions_trait(),
+            GeometryTypeExt::MultiPolygon(g) => g.boundary_dimensions_trait(),
+            GeometryTypeExt::Rect(g) => g.boundary_dimensions_trait(),
+            GeometryTypeExt::Triangle(g) => g.boundary_dimensions_trait(),
+        }
+    }
+}
+
 impl<C: GeoNum, G> HasDimensionsTrait<GeometryTag> for G
 where
     G: GeometryTraitExt<T = C>,
 {
-    crate::geometry_trait_ext_delegate_impl! {
-        fn is_empty_trait(&self) -> bool;
-        fn dimensions_trait(&self) -> Dimensions;
-        fn boundary_dimensions_trait(&self) -> Dimensions;
+    fn is_empty_trait(&self) -> bool {
+        geometry_is_empty(self)
+    }
+
+    fn dimensions_trait(&self) -> Dimensions {
+        geometry_dimensions(self)
+    }
+
+    fn boundary_dimensions_trait(&self) -> Dimensions {
+        geometry_boundary_dimensions(self)
     }
 }
 

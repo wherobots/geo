@@ -65,6 +65,14 @@ where
         matches!(self.as_type(), GeometryType::GeometryCollection(_))
     }
 
+    /// Returns the number of geometries inside this GeometryCollection
+    fn num_geometries_ext(&self) -> usize {
+        let GeometryType::GeometryCollection(gc) = self.as_type() else {
+            panic!("Not a GeometryCollection");
+        };
+        gc.num_geometries()
+    }
+
     /// Cast this geometry to a [`GeometryTypeExt`] enum, which allows for downcasting to a specific
     /// type. This does not work when the geometry is a GeometryCollection. Please use `is_collection`
     /// to check if the geometry is NOT a GeometryCollection first before calling this method.
@@ -228,7 +236,7 @@ where
 
     fn geometry_ext(&self, i: usize) -> Option<&Geometry<T>> {
         let GeometryType::GeometryCollection(gc) = self.as_type() else {
-            return None;
+            panic!("Not a GeometryCollection");
         };
         gc.geometry(i)
     }

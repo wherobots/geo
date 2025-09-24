@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use core::borrow::Borrow;
 
 use crate::geometry::*;
 use crate::intersects::{point_in_rect, value_in_between};
@@ -429,6 +430,34 @@ where
     }
 }
 
+fn geometry_calculate_coordinate_position<T, G>(
+    g: &G,
+    coord: &Coord<T>,
+    is_inside: &mut bool,
+    boundary_count: &mut usize,
+) where
+    T: GeoNum,
+    G: GeometryTraitExt<T = T>,
+{
+    if g.is_collection() {
+        for g_inner in g.geometries_ext() {
+            geometry_calculate_coordinate_position(g_inner.borrow(), coord, is_inside, boundary_count);
+        }
+    } else {
+        match g.as_type_ext() {
+            GeometryTypeExt::Point(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
+            GeometryTypeExt::Line(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
+            GeometryTypeExt::LineString(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
+            GeometryTypeExt::Polygon(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
+            GeometryTypeExt::MultiPoint(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
+            GeometryTypeExt::MultiLineString(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
+            GeometryTypeExt::MultiPolygon(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
+            GeometryTypeExt::Rect(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
+            GeometryTypeExt::Triangle(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
+        }
+    }
+}
+
 impl<T, G> CoordinatePositionTrait<GeometryTag> for G
 where
     T: GeoNum,
@@ -436,12 +465,13 @@ where
 {
     type T = T;
 
-    crate::geometry_trait_ext_delegate_impl! {
-        fn calculate_coordinate_position_trait(
-            &self,
-            coord: &Coord<T>,
-            is_inside: &mut bool,
-            boundary_count: &mut usize) -> ();
+    fn calculate_coordinate_position_trait(
+        &self,
+        coord: &Coord<T>,
+        is_inside: &mut bool,
+        boundary_count: &mut usize,
+    ) {
+        geometry_calculate_coordinate_position(self, coord, is_inside, boundary_count);
     }
 }
 

@@ -1,4 +1,5 @@
 use std::iter::Sum;
+use core::borrow::Borrow;
 
 use crate::CoordFloat;
 use geo_traits_ext::*;
@@ -169,19 +170,32 @@ where
         // Linear geometries (lines, linestrings) will contribute their actual length
         // Non-linear geometries (points, polygons) will contribute zero
         self.geometries_ext()
-            .map(|g| match g.as_type_ext() {
-                GeometryTypeExt::Point(_) => T::zero(),
-                GeometryTypeExt::Line(line) => line.euclidean_length_trait(),
-                GeometryTypeExt::LineString(ls) => ls.euclidean_length_trait(),
-                GeometryTypeExt::Polygon(_) => T::zero(),
-                GeometryTypeExt::MultiPoint(_) => T::zero(),
-                GeometryTypeExt::MultiLineString(mls) => mls.euclidean_length_trait(),
-                GeometryTypeExt::MultiPolygon(_) => T::zero(),
-                // GeometryTypeExt::GeometryCollection(gc) => gc.euclidean_length_trait(),
-                GeometryTypeExt::Rect(_) => T::zero(),
-                GeometryTypeExt::Triangle(_) => T::zero(),
-            })
+            .map(|g| geometry_euclidean_length(&g))
             .fold(T::zero(), |acc, next| acc + next)
+    }
+}
+
+fn geometry_euclidean_length<T, G>(g: &G) -> T
+where
+    T: CoordFloat + Sum,
+    G: GeometryTraitExt<T = T>,
+{
+    if g.is_collection() {
+        g.geometries_ext()
+            .map(|g_inner| geometry_euclidean_length(g_inner.borrow()))
+            .fold(T::zero(), |acc, next| acc + next)
+    } else {
+        match g.as_type_ext() {
+            GeometryTypeExt::Point(_) => T::zero(),
+            GeometryTypeExt::Line(line) => line.euclidean_length_trait(),
+            GeometryTypeExt::LineString(ls) => ls.euclidean_length_trait(),
+            GeometryTypeExt::Polygon(_) => T::zero(),
+            GeometryTypeExt::MultiPoint(_) => T::zero(),
+            GeometryTypeExt::MultiLineString(mls) => mls.euclidean_length_trait(),
+            GeometryTypeExt::MultiPolygon(_) => T::zero(),
+            GeometryTypeExt::Rect(_) => T::zero(),
+            GeometryTypeExt::Triangle(_) => T::zero(),
+        }
     }
 }
 
@@ -190,8 +204,8 @@ impl<T, G: GeometryTraitExt<T = T>> EuclideanLengthTrait<T, GeometryTag> for G
 where
     T: CoordFloat + Sum,
 {
-    crate::geometry_trait_ext_delegate_impl! {
-        fn euclidean_length_trait(&self) -> T;
+    fn euclidean_length_trait(&self) -> T {
+        geometry_euclidean_length(self)
     }
 }
 

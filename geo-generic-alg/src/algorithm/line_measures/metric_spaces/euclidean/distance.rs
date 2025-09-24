@@ -1147,7 +1147,7 @@ where
     LHS: GeometryCollectionTraitExt<T = F>,
     RHS: GeometryCollectionTraitExt<T = F>,
 {
-    fn generic_distance_trait(&self, rhs: &RHS) -> F {
+    fn generic_distance_trait(&self, _rhs: &RHS) -> F {
         // use num_traits::Bounded;
 
         // let mut min_distance = <F as Bounded>::max_value();
