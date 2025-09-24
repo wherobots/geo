@@ -54,7 +54,9 @@ where
     // See also https://github.com/geoarrow/geoarrow-rs/issues/1339.
     //
     // Although this could be worked around by not implementing generic functions using trait-based approach and use
-    // function-based approach instead, see https://github.com/geoarrow/geoarrow-rs/pull/956 and https://github.com/georust/wkb/pull/77.
+    // function-based approach instead, see https://github.com/geoarrow/geoarrow-rs/pull/956 and https://github.com/georust/wkb/pull/77,
+    // we are not certain if there will be other issues caused by recursive GATs in the future. So we decided to completely get rid
+    // of recursive GATs.
 
     type InnerGeometryRef<'a>: 'a + Borrow<Self>
     where
