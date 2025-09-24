@@ -27,9 +27,9 @@
 pub(crate) use crate::geometry::*;
 pub(crate) use crate::CoordNum;
 
+use core::borrow::Borrow;
 use geo_traits_ext::*;
 use Coord;
-use core::borrow::Borrow;
 
 /// Map a function over all the coordinates in an object, returning a new one
 pub trait MapCoords<T: CoordNum, NT: CoordNum> {
@@ -592,7 +592,11 @@ where
 
     fn map_coords_trait(&self, func: impl Fn(Coord<T>) -> Coord<NT> + Copy) -> Self::Output {
         if self.is_collection() {
-            let collection = GeometryCollection::new_from(self.geometries_ext().map(|g| g.borrow().map_coords(func)).collect());
+            let collection = GeometryCollection::new_from(
+                self.geometries_ext()
+                    .map(|g| g.borrow().map_coords(func))
+                    .collect(),
+            );
             Geometry::GeometryCollection(collection)
         } else {
             match self.as_type_ext() {
@@ -604,7 +608,9 @@ where
                 GeometryTypeExt::MultiLineString(x) => {
                     Geometry::MultiLineString(x.map_coords_trait(func))
                 }
-                GeometryTypeExt::MultiPolygon(x) => Geometry::MultiPolygon(x.map_coords_trait(func)),
+                GeometryTypeExt::MultiPolygon(x) => {
+                    Geometry::MultiPolygon(x.map_coords_trait(func))
+                }
                 GeometryTypeExt::Rect(x) => Geometry::Rect(x.map_coords_trait(func)),
                 GeometryTypeExt::Triangle(x) => Geometry::Triangle(x.map_coords_trait(func)),
             }
@@ -616,9 +622,10 @@ where
         func: impl Fn(Coord<T>) -> Result<Coord<NT>, E> + Copy,
     ) -> Result<Self::Output, E> {
         if self.is_collection() {
-            let geoms = self.geometries_ext()
-                    .map(|g| g.borrow().try_map_coords(func))
-                    .collect::<Result<Vec<_>, E>>()?;
+            let geoms = self
+                .geometries_ext()
+                .map(|g| g.borrow().try_map_coords(func))
+                .collect::<Result<Vec<_>, E>>()?;
             let collection = GeometryCollection::new_from(geoms);
             Ok(Geometry::GeometryCollection(collection))
         } else {
@@ -639,7 +646,9 @@ where
                     Ok(Geometry::MultiPolygon(x.try_map_coords_trait(func)?))
                 }
                 GeometryTypeExt::Rect(x) => Ok(Geometry::Rect(x.try_map_coords_trait(func)?)),
-                GeometryTypeExt::Triangle(x) => Ok(Geometry::Triangle(x.try_map_coords_trait(func)?)),
+                GeometryTypeExt::Triangle(x) => {
+                    Ok(Geometry::Triangle(x.try_map_coords_trait(func)?))
+                }
             }
         }
     }
@@ -1060,7 +1069,8 @@ mod test {
             expected
         );
         assert_eq!(
-            Geometry::GeometryCollection(gc).map_coords(|Coord { x, y }| (x + 10., y + 100.).into()),
+            Geometry::GeometryCollection(gc)
+                .map_coords(|Coord { x, y }| (x + 10., y + 100.).into()),
             Geometry::GeometryCollection(expected)
         );
     }

@@ -1,5 +1,5 @@
-use geo_traits_ext::*;
 use core::borrow::Borrow;
+use geo_traits_ext::*;
 
 use super::has_disjoint_bboxes;
 use super::IntersectsTrait;

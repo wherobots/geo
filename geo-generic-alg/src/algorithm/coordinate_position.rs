@@ -1,5 +1,5 @@
-use std::cmp::Ordering;
 use core::borrow::Borrow;
+use std::cmp::Ordering;
 
 use crate::geometry::*;
 use crate::intersects::{point_in_rect, value_in_between};
@@ -441,19 +441,42 @@ fn geometry_calculate_coordinate_position<T, G>(
 {
     if g.is_collection() {
         for g_inner in g.geometries_ext() {
-            geometry_calculate_coordinate_position(g_inner.borrow(), coord, is_inside, boundary_count);
+            geometry_calculate_coordinate_position(
+                g_inner.borrow(),
+                coord,
+                is_inside,
+                boundary_count,
+            );
         }
     } else {
         match g.as_type_ext() {
-            GeometryTypeExt::Point(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
-            GeometryTypeExt::Line(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
-            GeometryTypeExt::LineString(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
-            GeometryTypeExt::Polygon(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
-            GeometryTypeExt::MultiPoint(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
-            GeometryTypeExt::MultiLineString(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
-            GeometryTypeExt::MultiPolygon(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
-            GeometryTypeExt::Rect(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
-            GeometryTypeExt::Triangle(g) => g.calculate_coordinate_position_trait(coord, is_inside, boundary_count),
+            GeometryTypeExt::Point(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::Line(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::LineString(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::Polygon(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::MultiPoint(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::MultiLineString(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::MultiPolygon(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::Rect(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::Triangle(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
         }
     }
 }

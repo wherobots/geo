@@ -1,5 +1,5 @@
-use std::cmp::Ordering;
 use core::borrow::Borrow;
+use std::cmp::Ordering;
 
 use geo_traits_ext::*;
 

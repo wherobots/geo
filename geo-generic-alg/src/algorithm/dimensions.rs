@@ -1,5 +1,5 @@
-use geo_traits_ext::*;
 use core::borrow::Borrow;
+use geo_traits_ext::*;
 
 use crate::Orientation::Collinear;
 use crate::{CoordNum, GeoNum, GeometryCow};
@@ -172,7 +172,8 @@ where
             if self.num_geometries_ext() == 0 {
                 true
             } else {
-                self.geometries_ext().all(|g_inner| g_inner.borrow().is_empty_trait())
+                self.geometries_ext()
+                    .all(|g_inner| g_inner.borrow().is_empty_trait())
             }
         } else {
             match self.as_type_ext() {

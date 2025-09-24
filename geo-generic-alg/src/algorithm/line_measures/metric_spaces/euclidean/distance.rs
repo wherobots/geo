@@ -2,8 +2,8 @@ use super::{Distance, Euclidean};
 use crate::algorithm::Intersects;
 use crate::geometry::*;
 use crate::{Coord, CoordFloat, GeoFloat, Point};
-// use geo_traits::to_geo::ToGeoGeometry;
 use num_traits::{Bounded, Float};
+use std::borrow::Borrow;
 
 // Import all the utility functions from utils module
 use super::utils::{
@@ -391,12 +391,13 @@ pub trait DistanceExt<F: CoordFloat, Rhs = Self> {
 macro_rules! impl_distance_ext_for_polygonlike_geometry_trait {
     ($polygonlike_trait:ident, $polygonlike_tag:ident, [$(($geometry_trait:ident, $geometry_tag:ident)),*]) => {
         // Self-to-self distance implementation
-        impl<F, P: $polygonlike_trait<T = F>>
-            GenericDistanceTrait<F, $polygonlike_tag, $polygonlike_tag, P> for P
+        impl<F, LHS, RHS> GenericDistanceTrait<F, $polygonlike_tag, $polygonlike_tag, RHS> for LHS
         where
             F: GeoFloat,
+            LHS: $polygonlike_trait<T = F>,
+            RHS: $polygonlike_trait<T = F>,
         {
-            fn generic_distance_trait(&self, rhs: &P) -> F {
+            fn generic_distance_trait(&self, rhs: &RHS) -> F {
                 let poly1 = self.to_polygon();
                 let poly2 = rhs.to_polygon();
                 distance_polygon_to_polygon_generic(&poly1, &poly2)
@@ -494,11 +495,13 @@ macro_rules! impl_polygonlike_to_geometry_distance {
 /// Follows the same pattern as impl_euclidean_distance_for_iter_geometry!
 macro_rules! impl_distance_ext_for_iter_geometry_trait {
     ($iter_trait:ident, $iter_tag:ident, $member_method:ident) => {
-        impl<F, I: $iter_trait<T = F>> GenericDistanceTrait<F, $iter_tag, $iter_tag, I> for I
+        impl<F, LHS, RHS> GenericDistanceTrait<F, $iter_tag, $iter_tag, RHS> for LHS
         where
             F: GeoFloat,
+            LHS: $iter_trait<T = F>,
+            RHS: $iter_trait<T = F>,
         {
-            fn generic_distance_trait(&self, rhs: &I) -> F {
+            fn generic_distance_trait(&self, rhs: &RHS) -> F {
                 let mut min_dist: F = Float::max_value();
                 for member1 in self.$member_method() {
                     for member2 in rhs.$member_method() {
@@ -664,11 +667,13 @@ where
 // └────────────────────────────────────────────────────────────┘
 
 // Point-to-Point direct distance implementation
-impl<F, P: PointTraitExt<T = F>> GenericDistanceTrait<F, PointTag, PointTag, P> for P
+impl<F, LHS, RHS> GenericDistanceTrait<F, PointTag, PointTag, RHS> for LHS
 where
     F: GeoFloat,
+    LHS: PointTraitExt<T = F>,
+    RHS: PointTraitExt<T = F>,
 {
-    fn generic_distance_trait(&self, rhs: &P) -> F {
+    fn generic_distance_trait(&self, rhs: &RHS) -> F {
         distance_point_to_point_generic(self, rhs)
     }
 }
@@ -747,11 +752,13 @@ symmetric_distance_ext_trait_impl!(GeoFloat, LineTraitExt, LineTag, CoordTraitEx
 symmetric_distance_ext_trait_impl!(GeoFloat, LineTraitExt, LineTag, PointTraitExt, PointTag);
 
 // Line-to-Line direct distance implementation
-impl<F, L: LineTraitExt<T = F>> GenericDistanceTrait<F, LineTag, LineTag, L> for L
+impl<F, LHS, RHS> GenericDistanceTrait<F, LineTag, LineTag, RHS> for LHS
 where
     F: GeoFloat,
+    LHS: LineTraitExt<T = F>,
+    RHS: LineTraitExt<T = F>,
 {
-    fn generic_distance_trait(&self, rhs: &L) -> F {
+    fn generic_distance_trait(&self, rhs: &RHS) -> F {
         distance_line_to_line_generic(self, rhs)
     }
 }
@@ -1140,36 +1147,28 @@ impl_distance_geometry_collection_from_geometry!(MultiLineStringTraitExt, MultiL
 impl_distance_geometry_collection_from_geometry!(MultiPolygonTraitExt, MultiPolygonTag);
 impl_distance_geometry_collection_from_geometry!(RectTraitExt, RectTag);
 impl_distance_geometry_collection_from_geometry!(TriangleTraitExt, TriangleTag);
-// Manual implementation for GeometryCollection to GeometryCollection to avoid infinite recursion
+
 impl<F, LHS, RHS> GenericDistanceTrait<F, GeometryCollectionTag, GeometryCollectionTag, RHS> for LHS
 where
     F: GeoFloat,
     LHS: GeometryCollectionTraitExt<T = F>,
     RHS: GeometryCollectionTraitExt<T = F>,
 {
-    fn generic_distance_trait(&self, _rhs: &RHS) -> F {
-        // use num_traits::Bounded;
+    fn generic_distance_trait(&self, rhs: &RHS) -> F {
+        let mut min_distance = <F as Bounded>::max_value();
+        for lhs_geom in self.geometries_ext() {
+            for rhs_geom in rhs.geometries_ext() {
+                let distance = lhs_geom.distance_ext(&rhs_geom);
+                min_distance = min_distance.min(distance);
 
-        // let mut min_distance = <F as Bounded>::max_value();
+                // Early exit optimization
+                if distance == F::zero() {
+                    return F::zero();
+                }
+            }
+        }
 
-        // for lhs_geom in self.geometries_ext() {
-        //     for rhs_geom in rhs.geometries_ext() {
-        //         // Convert to concrete types for this specific case only
-        //         // This avoids the trait bound complexity while still using generic traits everywhere else
-        //         let lhs_concrete = lhs_geom.to_geometry();
-        //         let rhs_concrete = rhs_geom.to_geometry();
-        //         let distance = Euclidean.distance(&lhs_concrete, &rhs_concrete);
-        //         min_distance = min_distance.min(distance);
-
-        //         // Early exit optimization
-        //         if distance == F::zero() {
-        //             return F::zero();
-        //         }
-        //     }
-        // }
-
-        // min_distance
-        unimplemented!()
+        min_distance
     }
 }
 
@@ -1251,7 +1250,44 @@ macro_rules! impl_distance_geometry_to_type {
             RHS: $rhs_type<T = F>,
         {
             fn generic_distance_trait(&self, rhs: &RHS) -> F {
-                self.distance_ext(rhs)
+                if self.is_collection() {
+                    let mut min_distance = <F as Bounded>::max_value();
+                    for lhs_geom in self.geometries_ext() {
+                        let lhs_geom = lhs_geom.borrow();
+                        let distance = lhs_geom.generic_distance_trait(rhs);
+                        min_distance = min_distance.min(distance);
+
+                        // Early exit optimization
+                        if distance == F::zero() {
+                            return F::zero();
+                        }
+                    }
+                    min_distance
+                } else {
+                    match self.as_type_ext() {
+                        geo_traits_ext::GeometryTypeExt::Point(g) => g.generic_distance_trait(rhs),
+                        geo_traits_ext::GeometryTypeExt::Line(g) => g.generic_distance_trait(rhs),
+                        geo_traits_ext::GeometryTypeExt::LineString(g) => {
+                            g.generic_distance_trait(rhs)
+                        }
+                        geo_traits_ext::GeometryTypeExt::Polygon(g) => {
+                            g.generic_distance_trait(rhs)
+                        }
+                        geo_traits_ext::GeometryTypeExt::MultiPoint(g) => {
+                            g.generic_distance_trait(rhs)
+                        }
+                        geo_traits_ext::GeometryTypeExt::MultiLineString(g) => {
+                            g.generic_distance_trait(rhs)
+                        }
+                        geo_traits_ext::GeometryTypeExt::MultiPolygon(g) => {
+                            g.generic_distance_trait(rhs)
+                        }
+                        geo_traits_ext::GeometryTypeExt::Rect(g) => g.generic_distance_trait(rhs),
+                        geo_traits_ext::GeometryTypeExt::Triangle(g) => {
+                            g.generic_distance_trait(rhs)
+                        }
+                    }
+                }
             }
         }
     };
@@ -1268,38 +1304,112 @@ impl_distance_geometry_to_type!(RectTraitExt, RectTag);
 impl_distance_geometry_to_type!(TriangleTraitExt, TriangleTag);
 impl_distance_geometry_to_type!(GeometryCollectionTraitExt, GeometryCollectionTag);
 
-impl<F, G: GeometryTraitExt<T = F>> GenericDistanceTrait<F, GeometryTag, GeometryTag, G> for G
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    PointTraitExt,
+    PointTag,
+    GeometryTraitExt,
+    GeometryTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    LineTraitExt,
+    LineTag,
+    GeometryTraitExt,
+    GeometryTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    LineStringTraitExt,
+    LineStringTag,
+    GeometryTraitExt,
+    GeometryTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    PolygonTraitExt,
+    PolygonTag,
+    GeometryTraitExt,
+    GeometryTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    MultiPointTraitExt,
+    MultiPointTag,
+    GeometryTraitExt,
+    GeometryTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    MultiLineStringTraitExt,
+    MultiLineStringTag,
+    GeometryTraitExt,
+    GeometryTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    MultiPolygonTraitExt,
+    MultiPolygonTag,
+    GeometryTraitExt,
+    GeometryTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    RectTraitExt,
+    RectTag,
+    GeometryTraitExt,
+    GeometryTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    TriangleTraitExt,
+    TriangleTag,
+    GeometryTraitExt,
+    GeometryTag
+);
+symmetric_distance_ext_trait_impl!(
+    GeoFloat,
+    GeometryCollectionTraitExt,
+    GeometryCollectionTag,
+    GeometryTraitExt,
+    GeometryTag
+);
+
+impl<F, LHS, RHS> GenericDistanceTrait<F, GeometryTag, GeometryTag, RHS> for LHS
 where
     F: GeoFloat,
+    LHS: GeometryTraitExt<T = F>,
+    RHS: GeometryTraitExt<T = F>,
 {
-    fn generic_distance_trait(&self, rhs: &G) -> F {
-        use geo_traits_ext::GeometryTypeExt;
+    fn generic_distance_trait(&self, rhs: &RHS) -> F {
+        if self.is_collection() {
+            let mut min_distance = <F as Bounded>::max_value();
+            for lhs_geom in self.geometries_ext() {
+                let lhs_geom = lhs_geom.borrow();
+                let distance = lhs_geom.generic_distance_trait(rhs);
+                min_distance = min_distance.min(distance);
 
-        // This macro generates the entire match statement
-        macro_rules! generate_distance_match {
-            ($($left:ident => [$($right:ident),+]),+ $(,)?) => {
-                match (self.as_type_ext(), rhs.as_type_ext()) {
-                    $($(
-                        (GeometryTypeExt::$left(left), GeometryTypeExt::$right(right)) => {
-                            left.distance_ext(right)
-                        },
-                    )+)+
+                // Early exit optimization
+                if distance == F::zero() {
+                    return F::zero();
                 }
-            };
+            }
+            min_distance
+        } else {
+            match self.as_type_ext() {
+                geo_traits_ext::GeometryTypeExt::Point(g) => g.generic_distance_trait(rhs),
+                geo_traits_ext::GeometryTypeExt::Line(g) => g.generic_distance_trait(rhs),
+                geo_traits_ext::GeometryTypeExt::LineString(g) => g.generic_distance_trait(rhs),
+                geo_traits_ext::GeometryTypeExt::Polygon(g) => g.generic_distance_trait(rhs),
+                geo_traits_ext::GeometryTypeExt::MultiPoint(g) => g.generic_distance_trait(rhs),
+                geo_traits_ext::GeometryTypeExt::MultiLineString(g) => {
+                    g.generic_distance_trait(rhs)
+                }
+                geo_traits_ext::GeometryTypeExt::MultiPolygon(g) => g.generic_distance_trait(rhs),
+                geo_traits_ext::GeometryTypeExt::Rect(g) => g.generic_distance_trait(rhs),
+                geo_traits_ext::GeometryTypeExt::Triangle(g) => g.generic_distance_trait(rhs),
+            }
         }
-
-        // Generate the match with explicit left => [right types] mappings
-        generate_distance_match!(
-            Point => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Line => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            LineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Polygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Triangle => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            Rect => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            MultiPoint => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            MultiLineString => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-            MultiPolygon => [Point, Line, LineString, Polygon, Triangle, Rect, MultiPoint, MultiLineString, MultiPolygon],
-        )
     }
 }
 
@@ -2440,7 +2550,6 @@ mod tests {
 
         #[test]
         fn test_original_issue_verification() {
-            // This test verifies the fix for the segmentation fault issue reported in SedonaDB:
             let point = Point::new(0.0, 0.0);
             let linestring = LineString::from(vec![(0.0, 0.0), (1.0, 1.0)]);
 
@@ -2454,12 +2563,6 @@ mod tests {
                 Geometry::LineString(linestring),
             ]);
 
-            // Before our fix: This would cause infinite recursion because:
-            // 1. GeometryCollection calls distance_ext on each geometry
-            // 2. When geometry is another GeometryCollection, it calls distance_ext again
-            // 3. This triggers the same GeometryCollection implementation → infinite recursion
-            // 4. Stack overflow → segmentation fault
-
             // Test the concrete Distance API
             let distance = Euclidean.distance(&gc1, &gc2);
             assert_eq!(
@@ -2467,7 +2570,7 @@ mod tests {
                 "Distance between identical GeometryCollections should be 0"
             );
 
-            // Test the generic distance_ext API directly (this should trigger the problematic path)
+            // Test the generic distance_ext API directly
             use crate::line_measures::DistanceExt;
             let distance_ext = gc1.distance_ext(&gc2);
             assert_eq!(distance_ext, 0.0, "Generic distance should also be 0");
@@ -2488,8 +2591,18 @@ mod tests {
                 Geometry::LineString(linestring),
             ]);
 
-            // Force the generic trait path by calling distance_ext on trait objects
             let distance_result = gc1.distance_ext(&gc2);
+            assert_eq!(distance_result, 0.0);
+
+            let geom_gc1 = Geometry::GeometryCollection(gc1.clone());
+            let geom_gc2 = Geometry::GeometryCollection(gc2.clone());
+            let distance_result = geom_gc1.distance_ext(&geom_gc2);
+            assert_eq!(distance_result, 0.0);
+
+            let distance_result = geom_gc1.distance_ext(&gc2);
+            assert_eq!(distance_result, 0.0);
+
+            let distance_result = gc1.distance_ext(&geom_gc2);
             assert_eq!(distance_result, 0.0);
         }
     }

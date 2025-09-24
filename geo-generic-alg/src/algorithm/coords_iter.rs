@@ -1020,7 +1020,9 @@ where
                 GeometryTypeExt::LineString(g) => {
                     GeometryTraitCoordsIter::LineString(g.coords_iter_trait())
                 }
-                GeometryTypeExt::Polygon(g) => GeometryTraitCoordsIter::Polygon(g.coords_iter_trait()),
+                GeometryTypeExt::Polygon(g) => {
+                    GeometryTraitCoordsIter::Polygon(g.coords_iter_trait())
+                }
                 GeometryTypeExt::MultiPoint(g) => {
                     GeometryTraitCoordsIter::MultiPoint(g.coords_iter_trait())
                 }
@@ -1193,9 +1195,7 @@ where
         <G::MultiLineStringTypeExt<'a> as CoordsIterTrait<MultiLineStringTag>>::Iter<'a>,
     ),
     MultiPolygon(<G::MultiPolygonTypeExt<'a> as CoordsIterTrait<MultiPolygonTag>>::Iter<'a>),
-    GeometryCollection(
-        std::vec::IntoIter<Coord<G::T>>,
-    ),
+    GeometryCollection(std::vec::IntoIter<Coord<G::T>>),
     Rect(<G::RectTypeExt<'a> as CoordsIterTrait<RectTag>>::Iter<'a>),
     Triangle(<G::TriangleTypeExt<'a> as CoordsIterTrait<TriangleTag>>::Iter<'a>),
 }
@@ -1254,9 +1254,7 @@ where
     MultiPolygon(
         <G::MultiPolygonTypeExt<'a> as CoordsIterTrait<MultiPolygonTag>>::ExteriorIter<'a>,
     ),
-    GeometryCollection(
-        std::vec::IntoIter<Coord<G::T>>,
-    ),
+    GeometryCollection(std::vec::IntoIter<Coord<G::T>>),
     Rect(<G::RectTypeExt<'a> as CoordsIterTrait<RectTag>>::ExteriorIter<'a>),
     Triangle(<G::TriangleTypeExt<'a> as CoordsIterTrait<TriangleTag>>::ExteriorIter<'a>),
 }

@@ -1,5 +1,5 @@
-use std::iter::Sum;
 use core::borrow::Borrow;
+use std::iter::Sum;
 
 use crate::CoordFloat;
 use geo_traits_ext::*;
