@@ -136,7 +136,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use geo_types::Coord;
+    use geo_types::{Coord, GeometryCollection};
 
     use crate::Intersects;
     use crate::{
@@ -547,6 +547,26 @@ mod test {
         );
         assert!(a.intersects(&b));
         assert!(b.intersects(&a));
+    }
+
+    #[test]
+    fn test_geom_collection_collection() {
+        let collection0 = Geometry::GeometryCollection(GeometryCollection::new_from(vec![
+            Geometry::Point(Point::new(0., 0.)),
+            Geometry::Point(Point::new(1., 1.)),
+        ]));
+        let collection1 = Geometry::GeometryCollection(GeometryCollection::new_from(vec![
+            Geometry::Point(Point::new(0., 0.)),
+            Geometry::Point(Point::new(2., 2.)),
+        ]));
+        let collection2 = Geometry::GeometryCollection(GeometryCollection::new_from(vec![
+            Geometry::Point(Point::new(3., 3.)),
+            Geometry::Point(Point::new(4., 4.)),
+        ]));
+        assert!(collection0.intersects(&collection1));
+        assert!(collection1.intersects(&collection0));
+        assert!(!collection0.intersects(&collection2));
+        assert!(!collection2.intersects(&collection0));
     }
 
     #[test]

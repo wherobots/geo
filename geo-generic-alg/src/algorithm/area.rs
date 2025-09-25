@@ -1,6 +1,7 @@
 use geo_traits_ext::*;
 
 use crate::{CoordFloat, CoordNum};
+use core::borrow::Borrow;
 
 pub(crate) fn twice_signed_ring_area<T: CoordNum, LS: LineStringTraitExt<T = T>>(
     linestring: &LS,
@@ -260,16 +261,6 @@ where
     }
 }
 
-impl<T, G: GeometryTraitExt<T = T>> AreaTrait<T, GeometryTag> for G
-where
-    T: CoordFloat,
-{
-    crate::geometry_trait_ext_delegate_impl! {
-        fn signed_area_trait(&self) -> T;
-        fn unsigned_area_trait(&self) -> T;
-    }
-}
-
 impl<T, GC: GeometryCollectionTraitExt<T = T>> AreaTrait<T, GeometryCollectionTag> for GC
 where
     T: CoordFloat,
@@ -284,6 +275,51 @@ where
         self.geometries_ext()
             .map(|g| g.unsigned_area_trait())
             .fold(T::zero(), |acc, next| acc + next)
+    }
+}
+
+impl<T, G: GeometryTraitExt<T = T>> AreaTrait<T, GeometryTag> for G
+where
+    T: CoordFloat,
+{
+    fn signed_area_trait(&self) -> T {
+        if self.is_collection() {
+            self.geometries_ext()
+                .map(|g_inner| g_inner.borrow().signed_area_trait())
+                .fold(T::zero(), |acc, next| acc + next)
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(g) => g.signed_area_trait(),
+                GeometryTypeExt::Line(g) => g.signed_area_trait(),
+                GeometryTypeExt::LineString(g) => g.signed_area_trait(),
+                GeometryTypeExt::Polygon(g) => g.signed_area_trait(),
+                GeometryTypeExt::MultiPoint(g) => g.signed_area_trait(),
+                GeometryTypeExt::MultiLineString(g) => g.signed_area_trait(),
+                GeometryTypeExt::MultiPolygon(g) => g.signed_area_trait(),
+                GeometryTypeExt::Rect(g) => g.signed_area_trait(),
+                GeometryTypeExt::Triangle(g) => g.signed_area_trait(),
+            }
+        }
+    }
+
+    fn unsigned_area_trait(&self) -> T {
+        if self.is_collection() {
+            self.geometries_ext()
+                .map(|g_inner| g_inner.borrow().unsigned_area_trait())
+                .fold(T::zero(), |acc, next| acc + next)
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(g) => g.unsigned_area_trait(),
+                GeometryTypeExt::Line(g) => g.unsigned_area_trait(),
+                GeometryTypeExt::LineString(g) => g.unsigned_area_trait(),
+                GeometryTypeExt::Polygon(g) => g.unsigned_area_trait(),
+                GeometryTypeExt::MultiPoint(g) => g.unsigned_area_trait(),
+                GeometryTypeExt::MultiLineString(g) => g.unsigned_area_trait(),
+                GeometryTypeExt::MultiPolygon(g) => g.unsigned_area_trait(),
+                GeometryTypeExt::Rect(g) => g.unsigned_area_trait(),
+                GeometryTypeExt::Triangle(g) => g.unsigned_area_trait(),
+            }
+        }
     }
 }
 

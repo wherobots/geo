@@ -2,6 +2,7 @@ use super::Distance;
 use crate::{CoordFloat, Line, LineString, MultiLineString, Point};
 use geo_traits::{CoordTrait, PolygonTrait};
 use geo_traits_ext::*;
+use std::borrow::Borrow;
 
 /// Calculate the length of a geometry using a given [metric space](crate::algorithm::line_measures::metric_spaces).
 ///
@@ -390,35 +391,13 @@ where
 {
     fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         self.geometries_ext()
-            .map(|g| match g.as_type_ext() {
-                GeometryTypeExt::Point(_) => F::zero(),
-                GeometryTypeExt::Line(line) => line.length_trait(metric_space),
-                GeometryTypeExt::LineString(ls) => ls.length_trait(metric_space),
-                GeometryTypeExt::Polygon(_) => F::zero(),
-                GeometryTypeExt::MultiPoint(_) => F::zero(),
-                GeometryTypeExt::MultiLineString(mls) => mls.length_trait(metric_space),
-                GeometryTypeExt::MultiPolygon(_) => F::zero(),
-                GeometryTypeExt::GeometryCollection(gc) => gc.length_trait(metric_space),
-                GeometryTypeExt::Rect(_) => F::zero(),
-                GeometryTypeExt::Triangle(_) => F::zero(),
-            })
+            .map(|g| g.borrow().length_trait(metric_space))
             .fold(F::zero(), |acc, next| acc + next)
     }
 
     fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
         self.geometries_ext()
-            .map(|g| match g.as_type_ext() {
-                GeometryTypeExt::Point(_) => F::zero(),
-                GeometryTypeExt::Line(_) => F::zero(), // 1D geometry - no perimeter
-                GeometryTypeExt::LineString(_) => F::zero(), // 1D geometry - no perimeter
-                GeometryTypeExt::Polygon(polygon) => polygon.perimeter_trait(metric_space),
-                GeometryTypeExt::MultiPoint(_) => F::zero(),
-                GeometryTypeExt::MultiLineString(_) => F::zero(), // 1D geometry - no perimeter
-                GeometryTypeExt::MultiPolygon(mp) => mp.perimeter_trait(metric_space),
-                GeometryTypeExt::GeometryCollection(gc) => gc.perimeter_trait(metric_space),
-                GeometryTypeExt::Rect(rect) => rect.perimeter_trait(metric_space),
-                GeometryTypeExt::Triangle(triangle) => triangle.perimeter_trait(metric_space),
-            })
+            .map(|g| g.borrow().perimeter_trait(metric_space))
             .fold(F::zero(), |acc, next| acc + next)
     }
 }
@@ -427,18 +406,44 @@ impl<F, G: GeometryTraitExt<T = F>> LengthMeasurableTrait<F, GeometryTag> for G
 where
     F: CoordFloat,
 {
-    // This macro delegates the `length_trait` method to the appropriate geometry variant.
-    // It is critical for WKB (Well-Known Binary) compatibility, ensuring that trait methods
-    // are correctly dispatched for all geometry types when deserializing from WKB.
-    crate::geometry_trait_ext_delegate_impl! {
-        fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F;
+    fn length_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        if self.is_collection() {
+            self.geometries_ext()
+                .map(|g_inner| g_inner.borrow().length_trait(metric_space))
+                .fold(F::zero(), |acc, next| acc + next)
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(_) => F::zero(),
+                GeometryTypeExt::Line(line) => line.length_trait(metric_space),
+                GeometryTypeExt::LineString(ls) => ls.length_trait(metric_space),
+                GeometryTypeExt::Polygon(_) => F::zero(),
+                GeometryTypeExt::MultiPoint(_) => F::zero(),
+                GeometryTypeExt::MultiLineString(mls) => mls.length_trait(metric_space),
+                GeometryTypeExt::MultiPolygon(_) => F::zero(),
+                GeometryTypeExt::Rect(_) => F::zero(),
+                GeometryTypeExt::Triangle(_) => F::zero(),
+            }
+        }
     }
 
-    // This macro delegates the `perimeter_trait` method to the appropriate geometry variant.
-    // It is critical for WKB (Well-Known Binary) compatibility, ensuring that trait methods
-    // are correctly dispatched for all geometry types when deserializing from WKB.
-    crate::geometry_trait_ext_delegate_impl! {
-        fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F;
+    fn perimeter_trait(&self, metric_space: &impl Distance<F, Point<F>, Point<F>>) -> F {
+        if self.is_collection() {
+            self.geometries_ext()
+                .map(|g_inner| g_inner.borrow().perimeter_trait(metric_space))
+                .fold(F::zero(), |acc, next| acc + next)
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(_) => F::zero(),
+                GeometryTypeExt::Line(_) => F::zero(), // 1D geometry - no perimeter
+                GeometryTypeExt::LineString(_) => F::zero(), // 1D geometry - no perimeter
+                GeometryTypeExt::Polygon(polygon) => polygon.perimeter_trait(metric_space),
+                GeometryTypeExt::MultiPoint(_) => F::zero(),
+                GeometryTypeExt::MultiLineString(_) => F::zero(), // 1D geometry - no perimeter
+                GeometryTypeExt::MultiPolygon(mp) => mp.perimeter_trait(metric_space),
+                GeometryTypeExt::Rect(rect) => rect.perimeter_trait(metric_space),
+                GeometryTypeExt::Triangle(triangle) => triangle.perimeter_trait(metric_space),
+            }
+        }
     }
 }
 
@@ -688,6 +693,13 @@ mod tests {
                 2.8284271247461903, // 2*sqrt(2) only from linestrings
                 epsilon = 1e-10
             );
+
+            // GEOMETRY representation of GEOMETRYCOLLECTION
+            assert_relative_eq!(
+                Geometry::GeometryCollection(collection.clone()).length_ext(&Euclidean),
+                2.8284271247461903, // 2*sqrt(2) only from linestrings
+                epsilon = 1e-10
+            );
         }
 
         #[test]
@@ -773,6 +785,13 @@ mod tests {
             ]);
             assert_relative_eq!(
                 collection.perimeter_ext(&Euclidean),
+                4.0, // only polygon perimeter counts
+                epsilon = 1e-10
+            );
+
+            // GEOMETRY representation of GEOMETRYCOLLECTION
+            assert_relative_eq!(
+                Geometry::GeometryCollection(collection).perimeter_ext(&Euclidean),
                 4.0, // only polygon perimeter counts
                 epsilon = 1e-10
             );

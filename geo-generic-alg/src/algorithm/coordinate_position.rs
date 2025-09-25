@@ -1,3 +1,4 @@
+use core::borrow::Borrow;
 use std::cmp::Ordering;
 
 use crate::geometry::*;
@@ -429,6 +430,57 @@ where
     }
 }
 
+fn geometry_calculate_coordinate_position<T, G>(
+    g: &G,
+    coord: &Coord<T>,
+    is_inside: &mut bool,
+    boundary_count: &mut usize,
+) where
+    T: GeoNum,
+    G: GeometryTraitExt<T = T>,
+{
+    if g.is_collection() {
+        for g_inner in g.geometries_ext() {
+            geometry_calculate_coordinate_position(
+                g_inner.borrow(),
+                coord,
+                is_inside,
+                boundary_count,
+            );
+        }
+    } else {
+        match g.as_type_ext() {
+            GeometryTypeExt::Point(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::Line(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::LineString(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::Polygon(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::MultiPoint(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::MultiLineString(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::MultiPolygon(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::Rect(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+            GeometryTypeExt::Triangle(g) => {
+                g.calculate_coordinate_position_trait(coord, is_inside, boundary_count)
+            }
+        }
+    }
+}
+
 impl<T, G> CoordinatePositionTrait<GeometryTag> for G
 where
     T: GeoNum,
@@ -436,12 +488,13 @@ where
 {
     type T = T;
 
-    crate::geometry_trait_ext_delegate_impl! {
-        fn calculate_coordinate_position_trait(
-            &self,
-            coord: &Coord<T>,
-            is_inside: &mut bool,
-            boundary_count: &mut usize) -> ();
+    fn calculate_coordinate_position_trait(
+        &self,
+        coord: &Coord<T>,
+        is_inside: &mut bool,
+        boundary_count: &mut usize,
+    ) {
+        geometry_calculate_coordinate_position(self, coord, is_inside, boundary_count);
     }
 }
 
@@ -794,10 +847,15 @@ mod test {
         let triangle = Triangle::new((0.0, 0.0).into(), (5.0, 10.0).into(), (10.0, 0.0).into());
         let rect = Rect::new((0.0, 0.0), (10.0, 10.0));
         let collection = GeometryCollection::new_from(vec![triangle.into(), rect.into()]);
+        let geom = Geometry::GeometryCollection(collection.clone());
 
         //  outside of both
         assert_eq!(
             collection.coordinate_position(&coord! { x: 15.0, y: 15.0 }),
+            CoordPos::Outside
+        );
+        assert_eq!(
+            geom.coordinate_position(&coord! { x: 15.0, y: 15.0 }),
             CoordPos::Outside
         );
 
@@ -806,16 +864,28 @@ mod test {
             collection.coordinate_position(&coord! { x: 5.0, y: 5.0 }),
             CoordPos::Inside
         );
+        assert_eq!(
+            geom.coordinate_position(&coord! { x: 5.0, y: 5.0 }),
+            CoordPos::Inside
+        );
 
         // inside one, boundary of other
         assert_eq!(
             collection.coordinate_position(&coord! { x: 2.5, y: 5.0 }),
             CoordPos::OnBoundary
         );
+        assert_eq!(
+            geom.coordinate_position(&coord! { x: 2.5, y: 5.0 }),
+            CoordPos::OnBoundary
+        );
 
         //  boundary of both
         assert_eq!(
             collection.coordinate_position(&coord! { x: 5.0, y: 10.0 }),
+            CoordPos::Outside
+        );
+        assert_eq!(
+            geom.coordinate_position(&coord! { x: 5.0, y: 10.0 }),
             CoordPos::Outside
         );
     }

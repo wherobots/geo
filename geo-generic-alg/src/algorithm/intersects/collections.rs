@@ -1,8 +1,8 @@
+use core::borrow::Borrow;
 use geo_traits_ext::*;
 
 use super::has_disjoint_bboxes;
 use super::IntersectsTrait;
-use crate::geometry_trait_ext_delegate_impl;
 use crate::GeoNum;
 
 macro_rules! impl_intersects_geometry {
@@ -13,8 +13,23 @@ macro_rules! impl_intersects_geometry {
             LHS: GeometryTraitExt<T = T>,
             RHS: $rhs_type<T = T>,
         {
-            geometry_trait_ext_delegate_impl! {
-                fn intersects_trait(&self, rhs: &RHS) -> bool;
+            fn intersects_trait(&self, rhs: &RHS) -> bool {
+                if self.is_collection() {
+                    self.geometries_ext()
+                        .any(|lhs_inner| lhs_inner.borrow().intersects_trait(rhs))
+                } else {
+                    match self.as_type_ext() {
+                        GeometryTypeExt::Point(g) => g.intersects_trait(rhs),
+                        GeometryTypeExt::Line(g) => g.intersects_trait(rhs),
+                        GeometryTypeExt::LineString(g) => g.intersects_trait(rhs),
+                        GeometryTypeExt::Polygon(g) => g.intersects_trait(rhs),
+                        GeometryTypeExt::MultiPoint(g) => g.intersects_trait(rhs),
+                        GeometryTypeExt::MultiLineString(g) => g.intersects_trait(rhs),
+                        GeometryTypeExt::MultiPolygon(g) => g.intersects_trait(rhs),
+                        GeometryTypeExt::Rect(g) => g.intersects_trait(rhs),
+                        GeometryTypeExt::Triangle(g) => g.intersects_trait(rhs),
+                    }
+                }
             }
         }
     };

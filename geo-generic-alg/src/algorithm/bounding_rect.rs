@@ -1,5 +1,6 @@
 use crate::utils::{partial_max, partial_min};
 use crate::{coord, geometry::*, CoordNum, GeometryCow};
+use core::borrow::Borrow;
 use geo_traits_ext::*;
 use geo_types::private_utils::get_bounding_rect;
 
@@ -199,17 +200,6 @@ where
     }
 }
 
-impl<T, G: GeometryTraitExt<T = T>> BoundingRectTrait<T, GeometryTag> for G
-where
-    T: CoordNum,
-{
-    type Output = Option<Rect<T>>;
-
-    crate::geometry_trait_ext_delegate_impl! {
-       fn bounding_rect_trait(&self) -> Self::Output;
-    }
-}
-
 impl<T, GC: GeometryCollectionTraitExt<T = T>> BoundingRectTrait<T, GeometryCollectionTag> for GC
 where
     T: CoordNum,
@@ -226,6 +216,39 @@ where
                 (Some(r1), Some(r2)) => Some(bounding_rect_merge(r1, r2)),
             }
         })
+    }
+}
+
+impl<T, G: GeometryTraitExt<T = T>> BoundingRectTrait<T, GeometryTag> for G
+where
+    T: CoordNum,
+{
+    type Output = Option<Rect<T>>;
+
+    fn bounding_rect_trait(&self) -> Self::Output {
+        if self.is_collection() {
+            self.geometries_ext().fold(None, |acc, next| {
+                let next_bounding_rect = next.borrow().bounding_rect_trait();
+
+                match (acc, next_bounding_rect) {
+                    (None, None) => None,
+                    (Some(r), None) | (None, Some(r)) => Some(r),
+                    (Some(r1), Some(r2)) => Some(bounding_rect_merge(r1, r2)),
+                }
+            })
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(g) => g.bounding_rect_trait().into(),
+                GeometryTypeExt::Line(g) => g.bounding_rect_trait().into(),
+                GeometryTypeExt::LineString(g) => g.bounding_rect_trait(),
+                GeometryTypeExt::Polygon(g) => g.bounding_rect_trait(),
+                GeometryTypeExt::MultiPoint(g) => g.bounding_rect_trait(),
+                GeometryTypeExt::MultiLineString(g) => g.bounding_rect_trait(),
+                GeometryTypeExt::MultiPolygon(g) => g.bounding_rect_trait(),
+                GeometryTypeExt::Rect(g) => g.bounding_rect_trait().into(),
+                GeometryTypeExt::Triangle(g) => g.bounding_rect_trait().into(),
+            }
+        }
     }
 }
 
@@ -377,6 +400,14 @@ mod test {
                 Geometry::Point(point! { x: 0., y: 0. }),
                 Geometry::Point(point! { x: 1., y: 2. }),
             ])
+            .bounding_rect(),
+        );
+        assert_eq!(
+            Some(Rect::new(coord! { x: 0., y: 0. }, coord! { x: 1., y: 2. })),
+            Geometry::GeometryCollection(GeometryCollection::new_from(vec![
+                Geometry::Point(point! { x: 0., y: 0. }),
+                Geometry::Point(point! { x: 1., y: 2. }),
+            ]))
             .bounding_rect(),
         );
     }

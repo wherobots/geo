@@ -1,5 +1,7 @@
 // Extend GeometryTrait traits for the `geo-traits` crate
 
+use core::{borrow::Borrow, panic};
+
 use geo_traits::*;
 use geo_types::*;
 
@@ -46,11 +48,36 @@ where
     where
         Self: 'a;
 
-    type GeometryCollectionTypeExt<'a>: 'a
-        + GeometryCollectionTraitExt<T = <Self as GeometryTrait>::T>
+    // Note that we don't have a GeometryCollectionTypeExt here, because it would introduce recursive GATs
+    // such as G::GeometryCollectionTypeExt::GeometryTypeExt::GeometryCollectionTypeExt::... and easily
+    // trigger a Rust compiler bug: https://github.com/rust-lang/rust/issues/128887 and https://github.com/rust-lang/rust/issues/131960.
+    // See also https://github.com/geoarrow/geoarrow-rs/issues/1339.
+    //
+    // Although this could be worked around by not implementing generic functions using trait-based approach and use
+    // function-based approach instead, see https://github.com/geoarrow/geoarrow-rs/pull/956 and https://github.com/georust/wkb/pull/77,
+    // we are not certain if there will be other issues caused by recursive GATs in the future. So we decided to completely get rid
+    // of recursive GATs.
+
+    type InnerGeometryRef<'a>: 'a + Borrow<Self>
     where
         Self: 'a;
 
+    /// Returns true if this geometry is a GeometryCollection
+    fn is_collection(&self) -> bool {
+        matches!(self.as_type(), GeometryType::GeometryCollection(_))
+    }
+
+    /// Returns the number of geometries inside this GeometryCollection
+    fn num_geometries_ext(&self) -> usize {
+        let GeometryType::GeometryCollection(gc) = self.as_type() else {
+            panic!("Not a GeometryCollection");
+        };
+        gc.num_geometries()
+    }
+
+    /// Cast this geometry to a [`GeometryTypeExt`] enum, which allows for downcasting to a specific
+    /// type. This does not work when the geometry is a GeometryCollection. Please use `is_collection`
+    /// to check if the geometry is NOT a GeometryCollection first before calling this method.
     fn as_type_ext(
         &self,
     ) -> GeometryTypeExt<
@@ -61,15 +88,32 @@ where
         Self::MultiPointTypeExt<'_>,
         Self::MultiLineStringTypeExt<'_>,
         Self::MultiPolygonTypeExt<'_>,
-        Self::GeometryCollectionTypeExt<'_>,
         Self::RectTypeExt<'_>,
         Self::TriangleTypeExt<'_>,
         Self::LineTypeExt<'_>,
     >;
+
+    /// Returns a geometry by index, or None if the index is out of bounds. This method only works with
+    /// GeometryCollection. Please use `is_collection` to check if the geometry is a GeometryCollection first before
+    /// calling this method.
+    fn geometry_ext(&self, i: usize) -> Option<Self::InnerGeometryRef<'_>>;
+
+    /// Returns a geometry by index without bounds checking. This method only works with GeometryCollection.
+    /// Please use `is_collection` to check if the geometry is a GeometryCollection first before calling this method.
+    ///
+    /// # Safety
+    /// The caller must ensure that `i` is a valid index less than the number of geometries.
+    /// Otherwise, this function may cause undefined behavior.
+    unsafe fn geometry_unchecked_ext(&self, i: usize) -> Self::InnerGeometryRef<'_>;
+
+    /// Returns an iterator over the geometries in this GeometryCollection. This method only works with
+    /// GeometryCollection. Please use `is_collection` to check if the geometry is a GeometryCollection first before
+    /// calling this method.
+    fn geometries_ext(&self) -> impl Iterator<Item = Self::InnerGeometryRef<'_>>;
 }
 
 #[derive(Debug)]
-pub enum GeometryTypeExt<'a, P, LS, Y, MP, ML, MY, GC, R, TT, L>
+pub enum GeometryTypeExt<'a, P, LS, Y, MP, ML, MY, R, TT, L>
 where
     P: PointTraitExt,
     LS: LineStringTraitExt,
@@ -77,7 +121,6 @@ where
     MP: MultiPointTraitExt,
     ML: MultiLineStringTraitExt,
     MY: MultiPolygonTraitExt,
-    GC: GeometryCollectionTraitExt,
     R: RectTraitExt,
     TT: TriangleTraitExt,
     L: LineTraitExt,
@@ -87,7 +130,6 @@ where
     <MP as GeometryTrait>::T: CoordNum,
     <ML as GeometryTrait>::T: CoordNum,
     <MY as GeometryTrait>::T: CoordNum,
-    <GC as GeometryTrait>::T: CoordNum,
     <R as GeometryTrait>::T: CoordNum,
     <TT as GeometryTrait>::T: CoordNum,
     <L as GeometryTrait>::T: CoordNum,
@@ -98,7 +140,6 @@ where
     MultiPoint(&'a MP),
     MultiLineString(&'a ML),
     MultiPolygon(&'a MY),
-    GeometryCollection(&'a GC),
     Rect(&'a R),
     Triangle(&'a TT),
     Line(&'a L),
@@ -137,11 +178,6 @@ macro_rules! forward_geometry_trait_ext_funcs {
         where
             Self: '__g_inner;
 
-        type GeometryCollectionTypeExt<'__g_inner>
-            = <Self as GeometryTrait>::GeometryCollectionType<'__g_inner>
-        where
-            Self: '__g_inner;
-
         type RectTypeExt<'__g_inner>
             = <Self as GeometryTrait>::RectType<'__g_inner>
         where
@@ -167,7 +203,6 @@ macro_rules! forward_geometry_trait_ext_funcs {
             Self::MultiPointTypeExt<'_>,
             Self::MultiLineStringTypeExt<'_>,
             Self::MultiPolygonTypeExt<'_>,
-            Self::GeometryCollectionTypeExt<'_>,
             Self::RectTypeExt<'_>,
             Self::TriangleTypeExt<'_>,
             Self::LineTypeExt<'_>,
@@ -179,7 +214,9 @@ macro_rules! forward_geometry_trait_ext_funcs {
                 GeometryType::MultiPoint(mp) => GeometryTypeExt::MultiPoint(mp),
                 GeometryType::MultiLineString(mls) => GeometryTypeExt::MultiLineString(mls),
                 GeometryType::MultiPolygon(mp) => GeometryTypeExt::MultiPolygon(mp),
-                GeometryType::GeometryCollection(gc) => GeometryTypeExt::GeometryCollection(gc),
+                GeometryType::GeometryCollection(_) => {
+                    panic!("GeometryCollection is not supported in GeometryTraitExt::as_type_ext")
+                }
                 GeometryType::Rect(r) => GeometryTypeExt::Rect(r),
                 GeometryType::Triangle(t) => GeometryTypeExt::Triangle(t),
                 GeometryType::Line(l) => GeometryTypeExt::Line(l),
@@ -193,17 +230,63 @@ where
     T: CoordNum,
 {
     forward_geometry_trait_ext_funcs!(T);
+
+    type InnerGeometryRef<'a>
+        = &'a Geometry<T>
+    where
+        Self: 'a;
+
+    fn geometry_ext(&self, i: usize) -> Option<&Geometry<T>> {
+        let GeometryType::GeometryCollection(gc) = self.as_type() else {
+            panic!("Not a GeometryCollection");
+        };
+        gc.geometry(i)
+    }
+
+    unsafe fn geometry_unchecked_ext(&self, i: usize) -> &Geometry<T> {
+        let GeometryType::GeometryCollection(gc) = self.as_type() else {
+            panic!("Not a GeometryCollection");
+        };
+        gc.geometry_unchecked(i)
+    }
+
+    fn geometries_ext(&self) -> impl Iterator<Item = &Geometry<T>> {
+        let GeometryType::GeometryCollection(gc) = self.as_type() else {
+            panic!("Not a GeometryCollection");
+        };
+        gc.geometries()
+    }
 }
 
 impl<T: CoordNum> GeoTraitExtWithTypeTag for Geometry<T> {
     type Tag = GeometryTag;
 }
 
-impl<T> GeometryTraitExt for &Geometry<T>
+impl<'a, T> GeometryTraitExt for &'a Geometry<T>
 where
     T: CoordNum,
 {
     forward_geometry_trait_ext_funcs!(T);
+
+    type InnerGeometryRef<'b>
+        = &'a Geometry<T>
+    where
+        Self: 'b;
+
+    fn geometry_ext(&self, i: usize) -> Option<&'a Geometry<T>> {
+        let g = *self;
+        g.geometry_ext(i)
+    }
+
+    unsafe fn geometry_unchecked_ext(&self, i: usize) -> &'a Geometry<T> {
+        let g = *self;
+        g.geometry_unchecked_ext(i)
+    }
+
+    fn geometries_ext(&self) -> impl Iterator<Item = &'a Geometry<T>> {
+        let g = *self;
+        g.geometries_ext()
+    }
 }
 
 impl<T: CoordNum> GeoTraitExtWithTypeTag for &Geometry<T> {
@@ -215,6 +298,27 @@ where
     T: CoordNum,
 {
     forward_geometry_trait_ext_funcs!(T);
+
+    type InnerGeometryRef<'a>
+        = &'a UnimplementedGeometry<T>
+    where
+        Self: 'a;
+
+    fn geometry_ext(&self, _i: usize) -> Option<Self::InnerGeometryRef<'_>> {
+        unimplemented!()
+    }
+
+    unsafe fn geometry_unchecked_ext(&self, _i: usize) -> Self::InnerGeometryRef<'_> {
+        unimplemented!()
+    }
+
+    fn geometries_ext(&self) -> impl Iterator<Item = Self::InnerGeometryRef<'_>> {
+        unimplemented!();
+
+        // For making the type checker happy
+        #[allow(unreachable_code)]
+        core::iter::empty()
+    }
 }
 
 impl<T: CoordNum> GeoTraitExtWithTypeTag for UnimplementedGeometry<T> {

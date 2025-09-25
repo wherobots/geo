@@ -1,3 +1,4 @@
+use core::borrow::Borrow;
 use std::iter::Sum;
 
 use crate::CoordFloat;
@@ -169,18 +170,7 @@ where
         // Linear geometries (lines, linestrings) will contribute their actual length
         // Non-linear geometries (points, polygons) will contribute zero
         self.geometries_ext()
-            .map(|g| match g.as_type_ext() {
-                GeometryTypeExt::Point(_) => T::zero(),
-                GeometryTypeExt::Line(line) => line.euclidean_length_trait(),
-                GeometryTypeExt::LineString(ls) => ls.euclidean_length_trait(),
-                GeometryTypeExt::Polygon(_) => T::zero(),
-                GeometryTypeExt::MultiPoint(_) => T::zero(),
-                GeometryTypeExt::MultiLineString(mls) => mls.euclidean_length_trait(),
-                GeometryTypeExt::MultiPolygon(_) => T::zero(),
-                GeometryTypeExt::GeometryCollection(gc) => gc.euclidean_length_trait(),
-                GeometryTypeExt::Rect(_) => T::zero(),
-                GeometryTypeExt::Triangle(_) => T::zero(),
-            })
+            .map(|g| g.euclidean_length_trait())
             .fold(T::zero(), |acc, next| acc + next)
     }
 }
@@ -190,8 +180,24 @@ impl<T, G: GeometryTraitExt<T = T>> EuclideanLengthTrait<T, GeometryTag> for G
 where
     T: CoordFloat + Sum,
 {
-    crate::geometry_trait_ext_delegate_impl! {
-        fn euclidean_length_trait(&self) -> T;
+    fn euclidean_length_trait(&self) -> T {
+        if self.is_collection() {
+            self.geometries_ext()
+                .map(|g_inner| g_inner.borrow().euclidean_length_trait())
+                .fold(T::zero(), |acc, next| acc + next)
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(_) => T::zero(),
+                GeometryTypeExt::Line(line) => line.euclidean_length_trait(),
+                GeometryTypeExt::LineString(ls) => ls.euclidean_length_trait(),
+                GeometryTypeExt::Polygon(_) => T::zero(),
+                GeometryTypeExt::MultiPoint(_) => T::zero(),
+                GeometryTypeExt::MultiLineString(mls) => mls.euclidean_length_trait(),
+                GeometryTypeExt::MultiPolygon(_) => T::zero(),
+                GeometryTypeExt::Rect(_) => T::zero(),
+                GeometryTypeExt::Triangle(_) => T::zero(),
+            }
+        }
     }
 }
 
@@ -368,6 +374,11 @@ mod test {
         // The polygon contributes 0 to the total
         assert_relative_eq!(
             collection.euclidean_length(),
+            2.8284271247461903,
+            epsilon = 1e-10
+        );
+        assert_relative_eq!(
+            Geometry::GeometryCollection(collection).euclidean_length(),
             2.8284271247461903,
             epsilon = 1e-10
         );

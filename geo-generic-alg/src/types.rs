@@ -156,38 +156,3 @@ macro_rules! __geometry_delegate_impl_helper {
             )+
         };
 }
-
-#[macro_export]
-macro_rules! geometry_trait_ext_delegate_impl {
-    ($($a:tt)*) => { $crate::__geometry_trait_ext_delegate_impl_helper!{ GeometryTypeExt, $($a)* } }
-}
-
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __geometry_trait_ext_delegate_impl_helper {
-    (
-        $enum:ident,
-        $(
-            $(#[$outer:meta])*
-            fn $func_name: ident(&$($self_life:lifetime)?self $(, $arg_name: ident: $arg_type: ty)*) -> $return: ty;
-         )+
-    ) => {
-            $(
-                $(#[$outer])*
-                fn $func_name(&$($self_life)? self, $($arg_name: $arg_type),*) -> $return {
-                    match self.as_type_ext() {
-                        $enum::Point(g) => g.$func_name($($arg_name),*).into(),
-                        $enum::Line(g) =>  g.$func_name($($arg_name),*).into(),
-                        $enum::LineString(g) => g.$func_name($($arg_name),*).into(),
-                        $enum::Polygon(g) => g.$func_name($($arg_name),*).into(),
-                        $enum::MultiPoint(g) => g.$func_name($($arg_name),*).into(),
-                        $enum::MultiLineString(g) => g.$func_name($($arg_name),*).into(),
-                        $enum::MultiPolygon(g) => g.$func_name($($arg_name),*).into(),
-                        $enum::GeometryCollection(g) => g.$func_name($($arg_name),*).into(),
-                        $enum::Rect(g) => g.$func_name($($arg_name),*).into(),
-                        $enum::Triangle(g) => g.$func_name($($arg_name),*).into(),
-                    }
-                }
-            )+
-        };
-}

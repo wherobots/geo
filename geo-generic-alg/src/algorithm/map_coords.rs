@@ -27,6 +27,7 @@
 pub(crate) use crate::geometry::*;
 pub(crate) use crate::CoordNum;
 
+use core::borrow::Borrow;
 use geo_traits_ext::*;
 use Coord;
 
@@ -590,21 +591,29 @@ where
     type Output = Geometry<NT>;
 
     fn map_coords_trait(&self, func: impl Fn(Coord<T>) -> Coord<NT> + Copy) -> Self::Output {
-        match self.as_type_ext() {
-            GeometryTypeExt::Point(x) => Geometry::Point(x.map_coords_trait(func)),
-            GeometryTypeExt::Line(x) => Geometry::Line(x.map_coords_trait(func)),
-            GeometryTypeExt::LineString(x) => Geometry::LineString(x.map_coords_trait(func)),
-            GeometryTypeExt::Polygon(x) => Geometry::Polygon(x.map_coords_trait(func)),
-            GeometryTypeExt::MultiPoint(x) => Geometry::MultiPoint(x.map_coords_trait(func)),
-            GeometryTypeExt::MultiLineString(x) => {
-                Geometry::MultiLineString(x.map_coords_trait(func))
+        if self.is_collection() {
+            let collection = GeometryCollection::new_from(
+                self.geometries_ext()
+                    .map(|g| g.borrow().map_coords(func))
+                    .collect(),
+            );
+            Geometry::GeometryCollection(collection)
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(x) => Geometry::Point(x.map_coords_trait(func)),
+                GeometryTypeExt::Line(x) => Geometry::Line(x.map_coords_trait(func)),
+                GeometryTypeExt::LineString(x) => Geometry::LineString(x.map_coords_trait(func)),
+                GeometryTypeExt::Polygon(x) => Geometry::Polygon(x.map_coords_trait(func)),
+                GeometryTypeExt::MultiPoint(x) => Geometry::MultiPoint(x.map_coords_trait(func)),
+                GeometryTypeExt::MultiLineString(x) => {
+                    Geometry::MultiLineString(x.map_coords_trait(func))
+                }
+                GeometryTypeExt::MultiPolygon(x) => {
+                    Geometry::MultiPolygon(x.map_coords_trait(func))
+                }
+                GeometryTypeExt::Rect(x) => Geometry::Rect(x.map_coords_trait(func)),
+                GeometryTypeExt::Triangle(x) => Geometry::Triangle(x.map_coords_trait(func)),
             }
-            GeometryTypeExt::MultiPolygon(x) => Geometry::MultiPolygon(x.map_coords_trait(func)),
-            GeometryTypeExt::GeometryCollection(x) => {
-                Geometry::GeometryCollection(x.map_coords_trait(func))
-            }
-            GeometryTypeExt::Rect(x) => Geometry::Rect(x.map_coords_trait(func)),
-            GeometryTypeExt::Triangle(x) => Geometry::Triangle(x.map_coords_trait(func)),
         }
     }
 
@@ -612,27 +621,35 @@ where
         &self,
         func: impl Fn(Coord<T>) -> Result<Coord<NT>, E> + Copy,
     ) -> Result<Self::Output, E> {
-        match self.as_type_ext() {
-            GeometryTypeExt::Point(x) => Ok(Geometry::Point(x.try_map_coords_trait(func)?)),
-            GeometryTypeExt::Line(x) => Ok(Geometry::Line(x.try_map_coords_trait(func)?)),
-            GeometryTypeExt::LineString(x) => {
-                Ok(Geometry::LineString(x.try_map_coords_trait(func)?))
+        if self.is_collection() {
+            let geoms = self
+                .geometries_ext()
+                .map(|g| g.borrow().try_map_coords(func))
+                .collect::<Result<Vec<_>, E>>()?;
+            let collection = GeometryCollection::new_from(geoms);
+            Ok(Geometry::GeometryCollection(collection))
+        } else {
+            match self.as_type_ext() {
+                GeometryTypeExt::Point(x) => Ok(Geometry::Point(x.try_map_coords_trait(func)?)),
+                GeometryTypeExt::Line(x) => Ok(Geometry::Line(x.try_map_coords_trait(func)?)),
+                GeometryTypeExt::LineString(x) => {
+                    Ok(Geometry::LineString(x.try_map_coords_trait(func)?))
+                }
+                GeometryTypeExt::Polygon(x) => Ok(Geometry::Polygon(x.try_map_coords_trait(func)?)),
+                GeometryTypeExt::MultiPoint(x) => {
+                    Ok(Geometry::MultiPoint(x.try_map_coords_trait(func)?))
+                }
+                GeometryTypeExt::MultiLineString(x) => {
+                    Ok(Geometry::MultiLineString(x.try_map_coords_trait(func)?))
+                }
+                GeometryTypeExt::MultiPolygon(x) => {
+                    Ok(Geometry::MultiPolygon(x.try_map_coords_trait(func)?))
+                }
+                GeometryTypeExt::Rect(x) => Ok(Geometry::Rect(x.try_map_coords_trait(func)?)),
+                GeometryTypeExt::Triangle(x) => {
+                    Ok(Geometry::Triangle(x.try_map_coords_trait(func)?))
+                }
             }
-            GeometryTypeExt::Polygon(x) => Ok(Geometry::Polygon(x.try_map_coords_trait(func)?)),
-            GeometryTypeExt::MultiPoint(x) => {
-                Ok(Geometry::MultiPoint(x.try_map_coords_trait(func)?))
-            }
-            GeometryTypeExt::MultiLineString(x) => {
-                Ok(Geometry::MultiLineString(x.try_map_coords_trait(func)?))
-            }
-            GeometryTypeExt::MultiPolygon(x) => {
-                Ok(Geometry::MultiPolygon(x.try_map_coords_trait(func)?))
-            }
-            GeometryTypeExt::GeometryCollection(x) => {
-                Ok(Geometry::GeometryCollection(x.try_map_coords_trait(func)?))
-            }
-            GeometryTypeExt::Rect(x) => Ok(Geometry::Rect(x.try_map_coords_trait(func)?)),
-            GeometryTypeExt::Triangle(x) => Ok(Geometry::Triangle(x.try_map_coords_trait(func)?)),
         }
     }
 }
@@ -1042,13 +1059,19 @@ mod test {
         let line1 = Geometry::LineString(LineString::from(vec![(0., 0.), (1., 2.)]));
 
         let gc = GeometryCollection::new_from(vec![p1, line1]);
+        let expected = GeometryCollection::new_from(vec![
+            Geometry::Point(Point::new(20., 110.)),
+            Geometry::LineString(LineString::from(vec![(10., 100.), (11., 102.)])),
+        ]);
 
         assert_eq!(
             gc.map_coords(|Coord { x, y }| (x + 10., y + 100.).into()),
-            GeometryCollection::new_from(vec![
-                Geometry::Point(Point::new(20., 110.)),
-                Geometry::LineString(LineString::from(vec![(10., 100.), (11., 102.)])),
-            ])
+            expected
+        );
+        assert_eq!(
+            Geometry::GeometryCollection(gc)
+                .map_coords(|Coord { x, y }| (x + 10., y + 100.).into()),
+            Geometry::GeometryCollection(expected)
         );
     }
 
